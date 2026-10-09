@@ -6,135 +6,303 @@
   const menuToggle = document.querySelector('[data-menu-toggle]');
   const mobileMenu = document.querySelector('[data-mobile-menu]');
   const form = document.querySelector('[data-consultation-form]');
+  const projectDialog = document.querySelector('[data-project-dialog]');
+  let lenis = null;
 
-  const setHeader = () => header.classList.toggle('scrolled', window.scrollY > window.innerHeight * .75);
-  window.addEventListener('scroll', setHeader, { passive: true });
-  setHeader();
+  const syncScrollLock = () => {
+    const locked = mobileMenu.classList.contains('open') || projectDialog.open;
+    if (lenis) locked ? lenis.stop() : lenis.start();
+  };
 
-  menuToggle.addEventListener('click', () => {
-    const open = !mobileMenu.classList.contains('open');
+  const setMenu = open => {
     mobileMenu.classList.toggle('open', open);
     header.classList.toggle('menu-active', open);
     document.body.classList.toggle('menu-open', open);
+    mobileMenu.inert = !open;
+    mobileMenu.setAttribute('aria-hidden', String(!open));
     menuToggle.setAttribute('aria-expanded', String(open));
     menuToggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-  });
-  mobileMenu.querySelectorAll('a').forEach(link => link.addEventListener('click', () => menuToggle.click()));
-
-  // Drive the video from the real scroll position rather than repeatedly
-  // tweening currentTime. This keeps seeks coalesced to one update per frame
-  // and still works if the animation CDN is unavailable.
-  const hero = document.querySelector('[data-hero]');
-  let videoDuration = 0;
-  let renderedFrame = -1;
-  let videoFrameRequest = 0;
-
-  const renderHeroFrame = () => {
-    videoFrameRequest = 0;
-    if (!videoDuration) return;
-    const scrollRange = Math.max(1, hero.offsetHeight - window.innerHeight);
-    const progress = Math.min(1, Math.max(0, (window.scrollY - hero.offsetTop) / scrollRange));
-    const frame = Math.round(progress * (videoDuration - .05) * 24);
-    if (frame === renderedFrame) return;
-    renderedFrame = frame;
-    video.currentTime = Math.min(videoDuration - .05, frame / 24);
+    syncScrollLock();
+    if (open) mobileMenu.querySelector('a').focus();
+    else menuToggle.focus({ preventScroll: true });
   };
-
-  const requestHeroFrame = () => {
-    if (videoFrameRequest) return;
-    videoFrameRequest = requestAnimationFrame(renderHeroFrame);
-  };
-
-  const enableVideoScrub = () => {
-    videoDuration = video.duration;
-    video.pause();
-    if (reducedMotion) {
-      video.currentTime = .01;
-      return;
+  menuToggle.addEventListener('click', () => setMenu(!mobileMenu.classList.contains('open')));
+  mobileMenu.querySelectorAll('a').forEach(link => link.addEventListener('click', () => setMenu(false)));
+  document.addEventListener('keydown', event => {
+    if (!mobileMenu.classList.contains('open')) return;
+    if (event.key === 'Escape') setMenu(false);
+    if (event.key === 'Tab') {
+      const links = [...mobileMenu.querySelectorAll('a')];
+      const first = menuToggle;
+      const last = links[links.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
-    requestHeroFrame();
-  };
+  });
+  window.matchMedia('(min-width: 901px)').addEventListener('change', event => {
+    if (event.matches && mobileMenu.classList.contains('open')) setMenu(false);
+  });
 
+  const scrollTo = target => {
+    if (lenis) lenis.scrollTo(target, { offset: -88 });
+    else target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  };
+  document.querySelectorAll('a[href^="#"]').forEach(link => {
+    link.addEventListener('click', event => {
+      const hash = link.getAttribute('href');
+      const target = document.getElementById(hash.slice(1));
+      if (!target) return;
+      event.preventDefault();
+      if (mobileMenu.classList.contains('open')) setMenu(false);
+      history.replaceState(null, '', hash);
+      scrollTo(target);
+      if (link.classList.contains('skip-link')) target.focus({ preventScroll: true });
+    });
+  });
+
+  // Wait for each decode before seeking again. Intermediate scroll frames can
+  // be discarded, but the newest target is always rendered after seeked.
+  const hero = document.querySelector('[data-hero]');
+  const heroPoster = document.querySelector('.hero-poster');
+  const heroCopy = document.querySelector('.hero-copy');
+  const buildProgress = document.querySelector('[data-build-progress]');
+  const buildPhase = document.querySelector('[data-build-phase]');
+  let videoDuration = 0;
+  let targetVideoTime = 0;
+  let videoReady = false;
+  let scrollFrame = 0;
+  const clamp = value => Math.max(0, Math.min(1, value));
+  const seekVideo = () => {
+    if (!videoDuration || video.readyState < 2 || video.seeking || reducedMotion) return;
+    if (Math.abs(video.currentTime - targetVideoTime) < 1 / 48) return;
+    video.currentTime = targetVideoTime;
+  };
+  const updateScroll = () => {
+    scrollFrame = 0;
+    const y = window.scrollY;
+    const viewport = window.innerHeight;
+    const pageRange = Math.max(1, document.documentElement.scrollHeight - viewport);
+    progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
+    header.classList.toggle('scrolled', y > 80);
+    const p = clamp((y - hero.offsetTop) / Math.max(1, hero.offsetHeight - viewport));
+    buildProgress.style.transform = `scaleX(${p})`;
+    buildPhase.textContent = p < .2 ? '01 / The vision' : p < .65 ? '02 / Taking shape' : p < .94 ? '03 / Every detail' : '04 / A new landmark';
+    if (!reducedMotion) {
+      heroPoster.style.opacity = videoReady ? String(1 - clamp((p - .035) / .13)) : '1';
+      const copyOpacity = 1 - clamp((p - .12) / .38);
+      heroCopy.style.opacity = String(copyOpacity);
+      heroCopy.style.transform = `translateY(${-p * 36}px)`;
+      heroCopy.inert = copyOpacity < .05;
+      if (videoDuration) {
+        const videoProgress = clamp((p - .035) / .965);
+        targetVideoTime = Math.min(videoDuration - .05, Math.round(videoProgress * (videoDuration - .05) * 24) / 24);
+        seekVideo();
+      }
+    }
+  };
+  const requestScrollUpdate = () => {
+    if (!scrollFrame) scrollFrame = requestAnimationFrame(updateScroll);
+  };
+  const enableVideoScrub = () => {
+    videoDuration = Number.isFinite(video.duration) ? video.duration : 0;
+    video.pause();
+    requestScrollUpdate();
+  };
   if (video.readyState >= 1) enableVideoScrub();
   else video.addEventListener('loadedmetadata', enableVideoScrub, { once: true });
-  if (!reducedMotion) {
-    window.addEventListener('scroll', requestHeroFrame, { passive: true });
-    window.addEventListener('resize', requestHeroFrame, { passive: true });
-  }
+  const markVideoReady = () => { videoReady = true; requestScrollUpdate(); };
+  if (video.readyState >= 2) markVideoReady();
+  video.addEventListener('loadeddata', markVideoReady, { once: true });
+  video.addEventListener('seeked', seekVideo);
+  video.addEventListener('error', () => { videoReady = false; requestScrollUpdate(); });
+  window.addEventListener('scroll', requestScrollUpdate, { passive: true });
+  window.addEventListener('resize', requestScrollUpdate, { passive: true });
+  updateScroll();
 
   if (window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
-
     if (!reducedMotion && window.Lenis) {
-      const lenis = new Lenis({ duration: 1.05, smoothWheel: true, wheelMultiplier: .9 });
+      lenis = new Lenis({ duration: .9, smoothWheel: true, wheelMultiplier: .9 });
       lenis.on('scroll', ScrollTrigger.update);
       gsap.ticker.add(t => lenis.raf(t * 1000));
       gsap.ticker.lagSmoothing(0);
-      document.querySelectorAll('a[href^="#"]').forEach(link => {
-        link.addEventListener('click', event => {
-          const target = document.querySelector(link.getAttribute('href'));
-          if (target) { event.preventDefault(); lenis.scrollTo(target, { offset: -64 }); }
-        });
-      });
     }
-
-    gsap.to(progress, { scaleX: 1, ease: 'none', scrollTrigger: { start: 0, end: 'max', scrub: .2 } });
-
     if (!reducedMotion) {
-      gsap.from('.hero h1 span, .hero h1 strong', { yPercent: 110, opacity: 0, stagger: .08, duration: 1.1, ease: 'power4.out', delay: .25 });
-      gsap.from('.eyebrow, .hero-actions', { opacity: 0, y: 20, duration: .8, stagger: .15, delay: .7 });
-
+      if (window.scrollY < window.innerHeight) {
+        gsap.from('.hero h1 > span', { y: 36, opacity: 0, stagger: .12, duration: 1.15, ease: 'power3.out' });
+        gsap.from('.eyebrow, .hero-bottom', { y: 15, opacity: 0, duration: .9, stagger: .12, delay: .35 });
+      }
       document.querySelectorAll('.reveal-section').forEach(el => {
-        gsap.from(el, { y: 70, opacity: 0, duration: 1.05, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 84%', once: true } });
+        if (el.getBoundingClientRect().top < window.innerHeight * .9) return;
+        gsap.from(el, { y: 24, opacity: 0, duration: .85, ease: 'power2.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: el, start: 'top 90%', once: true } });
       });
-
+      const blueprintTimeline = gsap.timeline({ scrollTrigger: { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 } });
       document.querySelectorAll('.blueprint-line').forEach((line, index) => {
         const length = line.getTotalLength();
         gsap.set(line, { strokeDasharray: length, strokeDashoffset: length });
-        gsap.to(line, { strokeDashoffset: 0, ease: 'none', scrollTrigger: { trigger: '.approach', start: 'top 82%', end: 'center 38%', scrub: .8 }, delay: index * .015 });
+        blueprintTimeline.to(line, { strokeDashoffset: 0, ease: 'none', duration: .7 }, index * .1);
       });
-      gsap.from('.model-stage', { opacity: 0, scale: .94, y: 36, duration: 1.2, ease: 'power3.out', scrollTrigger: { trigger: '.model-showcase', start: 'top 76%', once: true } });
+      document.querySelectorAll('[data-count]').forEach(el => {
+        const target = Number(el.dataset.count);
+        const value = { n: 0 };
+        gsap.to(value, { n: target, duration: 1.5, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 95%', once: true }, onUpdate: () => {
+          el.textContent = (Number.isInteger(target) ? Math.round(value.n) : value.n.toFixed(1)) + (el.dataset.suffix || '');
+        } });
+      });
     }
-
-    document.querySelectorAll('[data-count]').forEach(el => {
-      const target = Number(el.dataset.count);
-      const value = { n: 0 };
-      gsap.to(value, { n: target, duration: 1.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 90%', once: true }, onUpdate: () => { el.textContent = Number.isInteger(target) ? Math.round(value.n) : value.n.toFixed(1); } });
-    });
+    document.fonts.ready.then(() => ScrollTrigger.refresh());
+    window.addEventListener('load', () => ScrollTrigger.refresh(), { once: true });
   }
+
+  // Keep the navigation marker aligned with the section actually in view.
+  const navLinks = [...header.querySelectorAll('nav a')];
+  const navObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      navLinks.forEach(link => {
+        const active = link.hash === `#${entry.target.id}`;
+        link.classList.toggle('active', active);
+        if (active) link.setAttribute('aria-current', 'location');
+        else link.removeAttribute('aria-current');
+      });
+    });
+  }, { rootMargin: '-20% 0px -55% 0px' });
+  document.querySelectorAll('#top, #legacy, #projects, #approach, #model-study, #consultation').forEach(section => navObserver.observe(section));
+
+  const cards = [...document.querySelectorAll('.project-card')];
+  document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => {
+    const category = button.dataset.filter;
+    document.querySelectorAll('[data-filter]').forEach(filter => {
+      const active = filter === button;
+      filter.classList.toggle('active', active);
+      filter.setAttribute('aria-pressed', String(active));
+    });
+    document.querySelector('.project-list').classList.toggle('filtered', category !== 'all');
+    cards.forEach(card => { card.hidden = category !== 'all' && card.dataset.category !== category; });
+    const count = cards.filter(card => !card.hidden).length;
+    document.querySelector('[data-project-count]').textContent = `${String(count).padStart(2, '0')} ${count === 1 ? 'development' : 'developments'}`;
+    // Filtering must not leave cards in the hidden initial state of a reveal.
+    if (window.gsap) {
+      gsap.killTweensOf(cards);
+      gsap.set(cards, { clearProps: 'transform,opacity' });
+      if (window.ScrollTrigger) ScrollTrigger.refresh();
+    }
+    requestScrollUpdate();
+  }));
+
+  const projects = {
+    aurelian: { title: 'The Aurelian', location: 'Clifton, Karachi / Private residences', image: 'aurelian', status: 'Under construction', description: 'A sculpted addition to the Clifton skyline, with generous private terraces, warm natural materials, and residences designed around light. A place to retreat, without leaving the city behind.', specs: [['Collection', '28 private floors'], ['Completion', '2027'], ['Architecture', 'Contemporary residences'], ['Setting', 'Clifton, Karachi']], features: ['Private terraces with skyline views', 'Resident lounge and wellness studio', 'Landscaped arrival and attentive concierge'] },
+    vela: { title: 'Vela Residences', location: 'Dubai Maritime City / Waterfront living', image: 'vela', status: 'In development', description: 'Where the rhythm of the city meets the calm of the sea. Vela brings open-plan residences, deeply shaded balconies, and a considered collection of shared spaces to an extraordinary waterfront setting.', specs: [['Collection', '142 residences'], ['Completion', '2028'], ['Architecture', 'Waterfront apartments'], ['Setting', 'Dubai Maritime City']], features: ['Panoramic water views and shaded terraces', 'Infinity pool and private residents’ club', 'Waterfront promenade and wellness spaces'] },
+    meridian: { title: 'Meridian One', location: 'Islamabad / A connected new district', image: 'meridian', status: 'Launching soon', description: 'A new perspective on city living. Meridian One brings homes, workspaces, and destination retail together in a single landmark, grounded by a welcoming public realm and framed by Islamabad’s green horizons.', specs: [['Collection', '41 storeys'], ['Status', 'Launching soon'], ['Architecture', 'Mixed-use landmark'], ['Setting', 'Islamabad']], features: ['Residences and flexible workspaces', 'Curated retail and neighbourhood dining', 'Planted public spaces and sky gardens'] }
+  };
+  let selectedProject = null;
+  let dialogTrigger = null;
+  let enquiring = false;
+  document.querySelectorAll('[data-project]').forEach(button => button.addEventListener('click', () => {
+    const project = projects[button.dataset.project];
+    if (!project) return;
+    selectedProject = project;
+    dialogTrigger = button;
+    enquiring = false;
+    projectDialog.querySelector('[data-dialog-title]').textContent = project.title;
+    projectDialog.querySelector('[data-dialog-location]').textContent = project.location;
+    projectDialog.querySelector('[data-dialog-description]').textContent = project.description;
+    projectDialog.querySelector('[data-dialog-status]').textContent = project.status;
+    const image = projectDialog.querySelector('[data-dialog-image]');
+    image.src = `./assets/${project.image}.png`;
+    image.alt = `${project.title} architectural concept`;
+    const specs = projectDialog.querySelector('[data-dialog-specs]');
+    specs.replaceChildren(...project.specs.map(([label, value]) => {
+      const group = document.createElement('div');
+      const dt = document.createElement('dt');
+      const dd = document.createElement('dd');
+      dt.textContent = label; dd.textContent = value;
+      group.append(dt, dd); return group;
+    }));
+    projectDialog.querySelector('[data-dialog-features]').replaceChildren(...project.features.map(feature => {
+      const li = document.createElement('li'); li.textContent = feature; return li;
+    }));
+    projectDialog.showModal();
+    projectDialog.scrollTop = 0;
+    document.body.classList.add('dialog-open');
+    syncScrollLock();
+  }));
+  const closeProject = () => {
+    projectDialog.close();
+    document.body.classList.remove('dialog-open');
+    syncScrollLock();
+  };
+  document.querySelector('[data-dialog-close]').addEventListener('click', closeProject);
+  projectDialog.addEventListener('click', event => {
+    if (event.target !== projectDialog) return;
+    const rect = projectDialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeProject();
+  });
+  projectDialog.addEventListener('close', () => {
+    document.body.classList.remove('dialog-open');
+    syncScrollLock();
+    if (!enquiring && dialogTrigger) dialogTrigger.focus({ preventScroll: true });
+  });
+  document.querySelector('[data-dialog-enquire]').addEventListener('click', () => {
+    if (!selectedProject) return;
+    form.elements.project.value = selectedProject.title;
+    document.querySelector('[data-enquiry-result]').hidden = true;
+    enquiring = true;
+    closeProject();
+    scrollTo(document.querySelector('#consultation'));
+    form.elements.name.focus({ preventScroll: true });
+  });
 
   const initBuildingModel = () => {
     const canvas = document.querySelector('#building-model');
-    if (!canvas || !window.THREE) return;
+    const stage = document.querySelector('.model-stage');
+    const hint = document.querySelector('[data-model-hint]');
+    if (!canvas || !window.THREE) {
+      if (canvas) canvas.hidden = true;
+      hint.textContent = 'Architectural concept view';
+      return;
+    }
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, .1, 100);
     camera.position.set(9.1, 7.1, 11.4);
     camera.lookAt(0, 4.7, 0);
 
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
+    } catch {
+      canvas.hidden = true;
+      hint.textContent = 'Architectural concept view';
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = .78;
+    renderer.toneMappingExposure = .85;
 
     const tower = new THREE.Group();
 
-    const glass = new THREE.MeshPhysicalMaterial({ color: 0x40516e, metalness: .3, roughness: .2, transparent: true, opacity: .78, transmission: .025 });
-    const stone = new THREE.MeshStandardMaterial({ color: 0xcac0d2, metalness: .08, roughness: .5 });
-    const bronze = new THREE.MeshStandardMaterial({ color: 0x76516f, metalness: .78, roughness: .24 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1d263d, metalness: .6, roughness: .3 });
-    const green = new THREE.MeshStandardMaterial({ color: 0x36484d, metalness: .08, roughness: .8 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x526071, metalness: .45, roughness: .2, transparent: true, opacity: .87 });
+    const stone = new THREE.MeshStandardMaterial({ color: 0xbfb8af, metalness: .08, roughness: .55 });
+    const bronze = new THREE.MeshStandardMaterial({ color: 0x837466, metalness: .7, roughness: .3 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x30333d, metalness: .5, roughness: .3 });
+    const green = new THREE.MeshStandardMaterial({ color: 0x3f4c43, metalness: .08, roughness: .8 });
     const glow = new THREE.MeshStandardMaterial({ color: 0xd8b883, emissive: 0x9c6530, emissiveIntensity: .72, metalness: .05, roughness: .45 });
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x333b59, transparent: true, opacity: .38 });
+    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x8b8293, transparent: true, opacity: .2 });
+    const geometryCache = new Map();
+    const edgeCache = new Map();
 
     const addBlock = (size, position, material = glass, showEdges = true) => {
-      const geometry = new THREE.BoxGeometry(...size);
+      const key = size.join(',');
+      if (!geometryCache.has(key)) geometryCache.set(key, new THREE.BoxGeometry(...size));
+      const geometry = geometryCache.get(key);
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(...position);
       tower.add(mesh);
       if (showEdges) {
-        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edgeMaterial);
+        if (!edgeCache.has(key)) edgeCache.set(key, new THREE.EdgesGeometry(geometry));
+        const edges = new THREE.LineSegments(edgeCache.get(key), edgeMaterial);
         edges.position.copy(mesh.position);
         tower.add(edges);
       }
@@ -168,6 +336,8 @@
       if (floor % 2 === 0) {
         const shift = floor % 4 === 0 ? .24 : -.2;
         addBlock([width * .7, .055, .42], [centerX + shift, y + .025, depth / 2 + .16], stone, false);
+        addBlock([width * .7, .15, .018], [centerX + shift, y + .125, depth / 2 + .36], glass, false);
+        addBlock([width * .7, .014, .028], [centerX + shift, y + .2, depth / 2 + .36], bronze, false);
       }
       if (floor % 4 === 2) {
         addBlock([.44, .055, depth * .68], [centerX + width / 2 + .17, y + .025, .04], stone, false);
@@ -183,6 +353,18 @@
     [-1.08, -.72, -.36, 0, .36, .72, 1.08].forEach((x, i) => addBlock([.04, 3.38, .14], [x + .08, 7.35, 1.11], i % 3 === 1 ? bronze : dark, false));
     [-.86, -.43, 0, .43].forEach((x, i) => addBlock([.045, 1.64, .14], [x - .24, 10.0, .83], i % 2 ? bronze : dark, false));
     for (let y = 1.65; y < 4.35; y += .68) addBlock([1.86, .045, 2.5], [1.55, y, .26], stone, false);
+    // Continue the façade rhythm around the back and side elevations.
+    [[3.58, 4.02, 3.25, 2.65, -.46, 0], [7.35, 3.38, 2.72, 2.28, .08, -.1], [10, 1.64, 2.08, 1.86, -.24, -.12]].forEach(([y, height, width, depth, x, z]) => {
+      for (let i = 1; i < 6; i += 1) {
+        const offset = -width / 2 + width * i / 6;
+        addBlock([.04, height, .09], [x + offset, y, z - depth / 2 - .015], i % 2 ? bronze : dark, false);
+      }
+      for (const side of [-1, 1]) {
+        for (let i = 1; i < 5; i += 1) {
+          addBlock([.09, height, .035], [x + side * (width / 2 + .015), y, z - depth / 2 + depth * i / 5], bronze, false);
+        }
+      }
+    });
 
     // Warm window lights appear irregularly across the three tower tiers.
     [2.1, 2.78, 3.46, 4.14, 4.82].forEach((y, row) => {
@@ -219,23 +401,22 @@
     tower.position.copy(towerCenter).multiplyScalar(-1);
 
     const towerPivot = new THREE.Group();
-    towerPivot.rotation.x = -.03;
     towerPivot.rotation.y = -.58;
     towerPivot.scale.setScalar(towerScale);
     towerPivot.add(tower);
     scene.add(towerPivot);
 
-    const ground = new THREE.GridHelper(12, 18, 0x8d78a2, 0x343a54);
-    ground.position.y = -towerCenter.y * towerScale - .02;
+    const ground = new THREE.GridHelper(10, 16, 0x9785a4, 0x55505f);
+    ground.position.y = (towerBounds.min.y - towerCenter.y) * towerScale - .02;
     ground.material.transparent = true;
-    ground.material.opacity = .34;
+    ground.material.opacity = .22;
     scene.add(ground);
 
-    scene.add(new THREE.HemisphereLight(0xeee6f4, 0x202840, 1.35));
-    const key = new THREE.DirectionalLight(0xffffff, 1.72);
+    scene.add(new THREE.HemisphereLight(0xf3eee7, 0x34313e, 1.05));
+    const key = new THREE.DirectionalLight(0xffffff, 1.5);
     key.position.set(6, 10, 8);
     scene.add(key);
-    const purple = new THREE.PointLight(0xb68bcb, 2.8, 22);
+    const purple = new THREE.PointLight(0xc5b3d5, 1.7, 22);
     purple.position.set(-5, 4, 5);
     scene.add(purple);
     const warmLight = new THREE.PointLight(0xd9a96f, 1.8, 10);
@@ -243,36 +424,103 @@
     scene.add(warmLight);
 
     const modelSphere = new THREE.Sphere(new THREE.Vector3(), towerSphere.radius * towerScale);
-    const cameraDirection = new THREE.Vector3(1.05, .3, 1.32).normalize();
+    const cameraDirection = new THREE.Vector3(1.05, .22, 1.32).normalize();
 
-    let visible = true;
+    let visible = false;
+    let autoRotate = !reducedMotion;
+    let dragging = false;
+    let lastX = 0;
+    let dirty = true;
+    let lastTime = 0;
+    const rotateButton = document.querySelector('[data-model-rotate]');
+    const resetButton = document.querySelector('[data-model-reset]');
+    const wireButton = document.querySelector('[data-model-wireframe]');
+    const updateRotateButton = () => {
+      rotateButton.setAttribute('aria-pressed', String(autoRotate));
+      rotateButton.textContent = autoRotate ? 'Pause rotation Ⅱ' : 'Auto rotate ↻';
+    };
+    const setAutoRotate = value => { autoRotate = value; dirty = true; updateRotateButton(); };
+    updateRotateButton();
+    [rotateButton, resetButton, wireButton].forEach(button => { button.disabled = false; });
+    document.querySelector('.model-controls').hidden = false;
+    stage.classList.add('ready');
     const resize = () => {
-      const rect = canvas.parentElement.getBoundingClientRect();
-      const width = Math.max(1, rect.width);
-      const height = Math.max(1, rect.height);
+      const width = Math.max(1, canvas.clientWidth);
+      const height = Math.max(1, canvas.clientHeight);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       const verticalFov = THREE.MathUtils.degToRad(camera.fov);
       const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
       const limitingFov = Math.min(verticalFov, horizontalFov);
-      const distance = modelSphere.radius / Math.sin(limitingFov / 2) * 1.12;
+      const distance = modelSphere.radius / Math.sin(limitingFov / 2) * 1.08;
       camera.position.copy(modelSphere.center).add(cameraDirection.clone().multiplyScalar(distance));
       camera.lookAt(modelSphere.center);
       camera.near = Math.max(.1, distance / 100);
       camera.far = distance * 5;
       camera.updateProjectionMatrix();
+      dirty = true;
     };
     resize();
     new ResizeObserver(resize).observe(canvas.parentElement);
-    new IntersectionObserver(entries => { visible = entries[0].isIntersecting; }, { rootMargin: '120px' }).observe(canvas);
+    new IntersectionObserver(entries => { visible = entries[0].isIntersecting; dirty = true; }, { rootMargin: '120px' }).observe(canvas);
+    rotateButton.addEventListener('click', () => setAutoRotate(!autoRotate));
+    const resetView = () => { towerPivot.rotation.y = -.58; dirty = true; };
+    resetButton.addEventListener('click', resetView);
+    wireButton.addEventListener('click', () => {
+      const wireframe = wireButton.getAttribute('aria-pressed') !== 'true';
+      [glass, stone, bronze, dark, green, glow].forEach(material => { material.wireframe = wireframe; });
+      wireButton.setAttribute('aria-pressed', String(wireframe));
+      wireButton.textContent = wireframe ? 'Solid view' : 'Wireframe';
+      dirty = true;
+    });
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      dragging = true; lastX = event.clientX;
+      canvas.setPointerCapture(event.pointerId);
+      setAutoRotate(false);
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (!dragging) return;
+      towerPivot.rotation.y += (event.clientX - lastX) * .009;
+      lastX = event.clientX;
+      dirty = true;
+    });
+    const endDrag = () => { dragging = false; };
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('lostpointercapture', endDrag);
+    canvas.addEventListener('keydown', event => {
+      if (['ArrowLeft', 'ArrowRight', 'Home', ' '].includes(event.key)) event.preventDefault();
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        setAutoRotate(false);
+        towerPivot.rotation.y += event.key === 'ArrowLeft' ? -.12 : .12;
+        dirty = true;
+      } else if (event.key === 'Home') resetView();
+      else if (event.key === ' ') setAutoRotate(!autoRotate);
+    });
+    canvas.addEventListener('webglcontextlost', event => {
+      event.preventDefault();
+      visible = false;
+      stage.classList.remove('ready');
+      hint.textContent = 'Architectural concept view';
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      stage.classList.add('ready');
+      visible = true; dirty = true;
+      hint.textContent = 'Drag to explore · ← → to rotate';
+      resize();
+    });
+    document.addEventListener('visibilitychange', () => { lastTime = 0; dirty = true; });
 
-    const render = () => {
+    const render = time => {
       requestAnimationFrame(render);
-      if (!visible) return;
-      if (!reducedMotion) towerPivot.rotation.y += .0028;
-      renderer.render(scene, camera);
+      const delta = lastTime ? Math.min((time - lastTime) / 1000, .05) : 0;
+      lastTime = time;
+      if (!visible || document.hidden) return;
+      if (autoRotate && !dragging) { towerPivot.rotation.y += delta * .17; dirty = true; }
+      if (dirty) { renderer.render(scene, camera); dirty = false; }
     };
-    render();
+    requestAnimationFrame(render);
   };
 
   initBuildingModel();
@@ -280,8 +528,20 @@
   form.addEventListener('submit', event => {
     event.preventDefault();
     const data = new FormData(form);
-    const subject = encodeURIComponent(`Consultation request — ${data.get('interest')}`);
-    const body = encodeURIComponent(`Name: ${data.get('name')}\nEmail: ${data.get('email')}\nInterest: ${data.get('interest')}\n\n${data.get('message') || 'I would like to arrange a consultation.'}`);
-    window.location.href = `mailto:hello@novabuilders.dev?subject=${subject}&body=${body}`;
+    const draft = `Consultation enquiry — Nova Builders & Developers\n\nName: ${data.get('name')}\nEmail: ${data.get('email')}\nInterest: ${data.get('interest')}\nProject: ${data.get('project') || 'Still exploring'}\n\n${data.get('message') || 'I would like to arrange a private consultation.'}`;
+    document.querySelector('#enquiry-draft').value = draft;
+    document.querySelector('[data-enquiry-result]').hidden = false;
+    document.querySelector('[data-form-note]').textContent = 'Your enquiry is ready to copy. Nothing has been sent.';
+    document.querySelector('#enquiry-draft').focus({ preventScroll: true });
+  });
+  document.querySelector('[data-copy-enquiry]').addEventListener('click', async () => {
+    const draft = document.querySelector('#enquiry-draft');
+    try {
+      await navigator.clipboard.writeText(draft.value);
+      document.querySelector('[data-form-note]').textContent = 'Enquiry copied to your clipboard.';
+    } catch {
+      draft.focus(); draft.select();
+      document.querySelector('[data-form-note]').textContent = 'Select and copy the draft above with Ctrl+C or Command+C.';
+    }
   });
 })();
