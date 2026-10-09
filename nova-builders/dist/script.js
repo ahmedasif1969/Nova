@@ -100,7 +100,22 @@
   let frameCallback = null;
   let paintFrame = 0;
   let seekGeneration = 0;
+  let heroProgress = 0;
+  let displayedVideoFrame = 0;
+  let posterOpacity = 1;
   const clamp = value => Math.max(0, Math.min(1, value));
+  const syncHeroPoster = () => {
+    if (!videoReady || reducedMotion) posterOpacity = 1;
+    else {
+      const requestedOpacity = 1 - clamp((heroProgress - .035) / .13);
+      const rewindComplete = targetVideoTime < frameDuration * .5 && displayedVideoFrame === 0 && !video.seeking && !awaitingFrame;
+      // Scroll can reach the top before reverse decoding catches up. Keep the
+      // video uncovered until the opening frame has actually completed its seek.
+      // Preserve the initial forward fade and the cover on load/error.
+      if (requestedOpacity <= posterOpacity || rewindComplete) posterOpacity = requestedOpacity;
+    }
+    heroPoster.style.opacity = String(posterOpacity);
+  };
   const clearFrameWait = () => {
     seekGeneration++;
     if (frameCallback !== null && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(frameCallback);
@@ -122,7 +137,9 @@
     }
   };
   const finishFrameWait = () => {
+    displayedVideoFrame = Math.floor(video.currentTime / frameDuration + 1e-7);
     clearFrameWait();
+    syncHeroPoster();
     // Don't count time spent decoding/waiting toward the next catch-up step.
     lastScrubTick = 0;
     requestVideoUpdate();
@@ -206,6 +223,7 @@
     const heroHeight = hero.offsetHeight;
     heroActive = y >= heroTop && y < heroTop + heroHeight;
     const p = clamp((y - heroTop) / Math.max(1, heroHeight - viewport));
+    heroProgress = p;
     progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
     header.classList.toggle('scrolled', y > 80);
     buildProgress.style.transform = `scaleX(${p})`;
@@ -214,7 +232,6 @@
       // No media URL is attached until the visitor scrolls inside the hero.
       // Jumping directly to another section must not start a 29 MB download.
       if (p > 0 && y < heroTop + heroHeight) requestHeroVideo();
-      heroPoster.style.opacity = videoReady ? String(1 - clamp((p - .035) / .13)) : '1';
       const copyOpacity = 1 - clamp((p - .12) / .38);
       heroCopy.style.opacity = String(copyOpacity);
       heroCopy.style.transform = `translateY(${-p * 36}px)`;
@@ -226,6 +243,7 @@
         if (heroActive) requestVideoUpdate();
         else stopVideoScrub();
       }
+      syncHeroPoster();
     }
   };
   const requestScrollUpdate = () => {
@@ -238,11 +256,21 @@
   };
   if (video.readyState >= 1) enableVideoScrub();
   else video.addEventListener('loadedmetadata', enableVideoScrub, { once: true });
-  const markVideoReady = () => { videoReady = true; scrubTime = video.currentTime || 0; requestScrollUpdate(); };
+  const markVideoReady = () => {
+    videoReady = true;
+    scrubTime = video.currentTime || 0;
+    displayedVideoFrame = Math.floor(scrubTime / frameDuration + 1e-7);
+    requestScrollUpdate();
+  };
   if (video.readyState >= 2) markVideoReady();
   video.addEventListener('loadeddata', markVideoReady, { once: true });
   video.addEventListener('seeked', () => {
-    if (!awaitingFrame) { requestVideoUpdate(); return; }
+    if (!awaitingFrame) {
+      displayedVideoFrame = Math.floor(video.currentTime / frameDuration + 1e-7);
+      syncHeroPoster();
+      requestVideoUpdate();
+      return;
+    }
     if (framePresented) finishFrameWait();
     else waitForPaintFallback();
   });

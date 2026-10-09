@@ -230,6 +230,56 @@ test('reversing direction smoothly reaches the new destination without a stale f
   for (let i = 1; i < p.video.seeks.length; i++) assert.ok(Math.abs(p.video.seeks[i] - p.video.seeks[i - 1]) <= 3 / 24 + 1e-9);
 });
 
+test('returning to the top keeps the reverse video visible until its opening frame is decoded', async () => {
+  for (const frameCallbacks of [true, false]) {
+    const p = pageFixture({ frameCallbacks });
+    await startScrub(p, 1800); await settleScrub(p);
+    const poster = p.nodes.get('.hero-poster');
+    assert.equal(poster.style.opacity, '0');
+    const previousTime = p.video.currentTime;
+    p.window.scrollY = 0; await p.window.emit('scroll'); p.flush();
+    assert.equal(poster.style.opacity, '0', 'Scroll position alone must not cover the unwinding video');
+    for (let tick = 0; tick < 20; tick++) {
+      if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
+      p.presentFrame(); p.flush();
+      assert.equal(poster.style.opacity, '0', 'Keep later construction frames visible during reverse catch-up');
+    }
+    assert.ok(p.video.currentTime < previousTime && p.video.currentTime > 0.5);
+    await settleScrub(p);
+    assert.equal(Math.floor(p.video.currentTime * 24), 0);
+    assert.equal(poster.style.opacity, '1', 'Restore the twilight cover only after the opening frame is selected');
+    assert.equal(p.frames.size + p.videoFrames.size, 0);
+  }
+});
+
+test('returning from another section reverses without reloading or restoring the poster early', async () => {
+  const p = pageFixture(); await startScrub(p, 1800); await settleScrub(p);
+  p.window.scrollY = 5000; await p.window.emit('scroll'); p.flush();
+  p.window.scrollY = 150; await p.window.emit('scroll'); p.flush(); p.flush();
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0');
+  await settleScrub(p);
+  assert.ok(p.video.currentTime < 0.5);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0', 'Even near the top, video stays visible until fully rewound');
+  assert.equal(p.video.loads, 1);
+});
+
+test('reversing an in-flight opening seek does not restore the cover before decoding finishes', async () => {
+  const p = pageFixture(); await startScrub(p, 100);
+  const poster = p.nodes.get('.hero-poster');
+  const fadedOpacity = Number(poster.style.opacity);
+  assert.ok(fadedOpacity > 0 && fadedOpacity < 1, 'Preserve the original opening crossfade');
+  assert.equal(p.video.seeking, true);
+  p.window.scrollY = 0; await p.window.emit('scroll'); p.flush();
+  assert.equal(Number(poster.style.opacity), fadedOpacity);
+  await settleScrub(p);
+  assert.equal(poster.style.opacity, '1');
+  p.window.scrollY = 1800; await p.window.emit('scroll'); p.flush(); p.flush();
+  await settleScrub(p);
+  assert.equal(poster.style.opacity, '0');
+  assert.ok(p.video.currentTime > 8);
+  assert.equal(p.video.loads, 1, 'Forward scrolling after rewinding must reuse the video');
+});
+
 test('frame presentation before seeked still waits for the decode to finish', async () => {
   const p = pageFixture(); await startScrub(p);
   p.presentFrame(); p.flush();

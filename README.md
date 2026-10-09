@@ -34,6 +34,8 @@ The website source is in `nova-builders/dist/`. GSAP and Lenis load from their e
 
 Settling uses source-frame identity rather than exact timestamp equality. Seeks target the middle of the selected frame's interval, avoiding exact frame boundaries. The easing loop does not snap a small remaining error to an exact media timestamp; it stops as soon as the intended frame is selected. Regression checks cover midpoint seeks and idle scroll/media events without extra terminal corrections. These are deterministic controller tests, not confirmation of perceived browser playback.
 
+The twilight cover fades away during the initial forward scroll. On reverse, it cannot increase its opacity until the video has completed its seek back to the opening frame and scroll also targets that opening frame. This keeps a fast return to the top from covering reverse catch-up with the still image. Regression checks include returning from another section, reversal during an in-flight seek, and browsers with or without video-frame callbacks.
+
 The preserved `nova-construction.mp4` is byte-for-byte identical to the supplied original: 1344×768, 24 fps, approximately 12.25 seconds. The displayed `nova-construction-scrub.mp4` was re-encoded earlier with H.264/x264 CRF 22 and a keyframe every two frames, versus the original's CRF 20 and two keyframes across the clip. It retains the same resolution/frame rate but is a lossy derivative optimized for seeking, not a lossless copy. The recent image/font/CSS changes have not re-encoded either video. The hero now uses natural colour with no saturation filter, lighter localized shading for text contrast, and a subtle headline shadow. Full-screen cover cropping/enlargement still affects perceived sharpness.
 
 ### SEO status
