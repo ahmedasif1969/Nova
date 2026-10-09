@@ -161,12 +161,12 @@
     }
     if (!reducedMotion) {
       if (window.scrollY < window.innerHeight) {
-        gsap.from('.hero h1 > span', { y: 36, opacity: 0, stagger: .12, duration: 1.15, ease: 'power3.out' });
-        gsap.from('.eyebrow, .hero-bottom', { y: 15, opacity: 0, duration: .9, stagger: .12, delay: .35 });
+        // Keep the headline readable at first paint; motion should not gate LCP.
+        gsap.from('.hero h1 > span', { y: 12, stagger: .08, duration: .65, ease: 'power3.out', clearProps: 'transform' });
       }
       document.querySelectorAll('.reveal-section').forEach(el => {
         if (el.getBoundingClientRect().top < window.innerHeight * .9) return;
-        gsap.from(el, { y: 24, opacity: 0, duration: .85, ease: 'power2.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: el, start: 'top 90%', once: true } });
+        gsap.from(el, { y: 16, opacity: 0, duration: .65, ease: 'power2.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: el, start: 'top 90%', once: true } });
       });
       const blueprintTimeline = gsap.timeline({ scrollTrigger: { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 } });
       document.querySelectorAll('.blueprint-line').forEach((line, index) => {
@@ -223,7 +223,7 @@
   }));
 
   const projects = {
-    aurelian: { title: 'The Aurelian', location: 'Clifton, Karachi / Private residences', image: 'aurelian', status: 'Under construction', description: 'A sculpted addition to the Clifton skyline, with generous private terraces, warm natural materials, and residences designed around light. A place to retreat, without leaving the city behind.', specs: [['Collection', '28 private floors'], ['Completion', '2027'], ['Architecture', 'Contemporary residences'], ['Setting', 'Clifton, Karachi']], features: ['Private terraces with skyline views', 'Resident lounge and wellness studio', 'Landscaped arrival and attentive concierge'] },
+    aurelian: { title: 'The Aurelian', location: 'Clifton, Karachi / Private residences', image: 'aurelian-daylight', status: 'Under construction', description: 'A terraced residential tower with a landscaped arrival, deeply shaded balconies and homes planned around natural light. The concept pairs pale stone with bronze façade details and planting at the sky terraces.', specs: [['Collection', '28 levels'], ['Completion', '2027 (concept)'], ['Architecture', 'Terraced residential tower'], ['Setting', 'Clifton, Karachi']], features: ['Private terraces with skyline views', 'Resident lounge and wellness studio', 'Landscaped arrival and attentive concierge'] },
     vela: { title: 'Vela Residences', location: 'Dubai Maritime City / Waterfront living', image: 'vela', status: 'In development', description: 'Where the rhythm of the city meets the calm of the sea. Vela brings open-plan residences, deeply shaded balconies, and a considered collection of shared spaces to an extraordinary waterfront setting.', specs: [['Collection', '142 residences'], ['Completion', '2028'], ['Architecture', 'Waterfront apartments'], ['Setting', 'Dubai Maritime City']], features: ['Panoramic water views and shaded terraces', 'Infinity pool and private residents’ club', 'Waterfront promenade and wellness spaces'] },
     meridian: { title: 'Meridian One', location: 'Islamabad / A connected new district', image: 'meridian', status: 'Launching soon', description: 'A new perspective on city living. Meridian One brings homes, workspaces, and destination retail together in a single landmark, grounded by a welcoming public realm and framed by Islamabad’s green horizons.', specs: [['Collection', '41 storeys'], ['Status', 'Launching soon'], ['Architecture', 'Mixed-use landmark'], ['Setting', 'Islamabad']], features: ['Residences and flexible workspaces', 'Curated retail and neighbourhood dining', 'Planted public spaces and sky gardens'] }
   };
@@ -324,7 +324,7 @@
     const dark = new THREE.MeshStandardMaterial({ color: 0x30333d, metalness: .5, roughness: .3 });
     const green = new THREE.MeshStandardMaterial({ color: 0x3f4c43, metalness: .08, roughness: .8 });
     const glow = new THREE.MeshStandardMaterial({ color: 0xd8b883, emissive: 0x9c6530, emissiveIntensity: .72, metalness: .05, roughness: .45 });
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x8b8293, transparent: true, opacity: .2 });
+    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xa49a84, transparent: true, opacity: .2 });
     const geometryCache = new Map();
     const edgeCache = new Map();
 
@@ -441,19 +441,19 @@
     towerPivot.add(tower);
     scene.add(towerPivot);
 
-    const ground = new THREE.GridHelper(10, 16, 0x9785a4, 0x55505f);
+    const ground = new THREE.GridHelper(10, 16, 0x9c8968, 0x566052);
     ground.position.y = (towerBounds.min.y - towerCenter.y) * towerScale - .02;
     ground.material.transparent = true;
     ground.material.opacity = .22;
     scene.add(ground);
 
-    scene.add(new THREE.HemisphereLight(0xf3eee7, 0x34313e, 1.05));
+    scene.add(new THREE.HemisphereLight(0xf3eee7, 0x343d32, 1.05));
     const key = new THREE.DirectionalLight(0xffffff, 1.5);
     key.position.set(6, 10, 8);
     scene.add(key);
-    const purple = new THREE.PointLight(0xc5b3d5, 1.7, 22);
-    purple.position.set(-5, 4, 5);
-    scene.add(purple);
+    const fillLight = new THREE.PointLight(0xe4decd, 1.7, 22);
+    fillLight.position.set(-5, 4, 5);
+    scene.add(fillLight);
     const warmLight = new THREE.PointLight(0xd9a96f, 1.8, 10);
     warmLight.position.set(2, 2, 4);
     scene.add(warmLight);

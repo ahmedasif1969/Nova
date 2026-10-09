@@ -103,7 +103,7 @@ test('high-detail project images are separate from the lightweight hero', async 
   for (const [card] of cards) {
     assert.match(card, /-detail-1536\.webp/);
     assert.match(card, /loading="lazy"/);
-    assert.match(card, /sizes="\(max-width: 640px\) 180vw/);
+    assert.match(card, /sizes="(?:100vw|\(max-width: 640px\) 100vw, 50vw)"/);
   }
   for (const name of ['aurelian', 'vela', 'meridian']) {
     const original = await stat(resolve(root, `assets/${name}.png`));

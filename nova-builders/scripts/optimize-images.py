@@ -9,14 +9,14 @@ from PIL import Image
 
 assets = Path(__file__).resolve().parents[1] / "dist" / "assets"
 
-for name in ("aurelian", "vela", "meridian"):
+for name in ("aurelian", "vela", "meridian", "aurelian-daylight", "residence-interior", "material-detail"):
     original = assets / f"{name}.png"
     with Image.open(original) as source:
         image = source.convert("RGB")
         # The first-screen hero remains lightweight. Below-fold imagery uses
         # separate quality-95 files, always re-encoded from the original PNGs.
         variants = [(f"{name}-detail", 95)]
-        if name == "aurelian":
+        if name in ("aurelian", "aurelian-daylight"):
             variants.append((name, 78))
         for prefix, quality in variants:
             for width in (640, 960, 1536):

@@ -75,9 +75,33 @@ test('heading fonts start from HTML and below-fold CSS does not block first pain
   assert.match(html, /<noscript><link rel="stylesheet" href="\.\/styles\.css" \/><\/noscript>/);
 });
 
-test('the explicitly excluded headline animation and ScrollTrigger refresh hooks remain unchanged', async () => {
+test('restrained headline motion never hides first-paint text and refresh hooks remain intact', async () => {
   const script = await readFile(new URL('../dist/script.js', import.meta.url), 'utf8');
-  assert.match(script, /gsap\.from\('\.hero h1 > span', \{ y: 36, opacity: 0, stagger: \.12, duration: 1\.15/);
+  const headline = script.match(/gsap\.from\('\.hero h1 > span', \{[^}]+\}/)[0];
+  assert.match(headline, /y: 12/);
+  assert.doesNotMatch(headline, /opacity|delay/);
   assert.match(script, /document\.fonts\.ready\.then\(\(\) => ScrollTrigger\.refresh\(\)\)/);
   assert.match(script, /window\.addEventListener\('load', \(\) => ScrollTrigger\.refresh\(\), \{ once: true \}\)/);
+});
+
+test('hero styling preserves natural media colours with localized lighter shading', () => {
+  assert.match(inline, /\.hero-video \{ filter: none; \}/);
+  assert.match(inline, /\.hero-poster \{ object-position: 50% 55%; filter: none; \}/);
+  const wash = inline.match(/\.hero-wash \{([^}]+)\}/)[1];
+  assert.match(wash, /rgba\(15,16,20,\.32\), transparent 70%/);
+  assert.match(wash, /rgba\(15,16,20,\.55\), transparent 58%/);
+  assert.doesNotMatch(wash, /rgba\(24,22,31,\.84\)/);
+  assert.match(inline, /text-shadow: 0 2px 16px rgba\(0,0,0,\.28\)/);
+});
+
+test('philosophy shows the full company name and promise uses paired inline quotation marks', () => {
+  assert.match(html, /<span class="philosophy-brand">Nova <small>Builders &amp; Developers<\/small><\/span>/);
+  assert.doesNotMatch(html, /class="small-monogram"|class="quote-mark"/);
+  assert.match(html, /<blockquote>“Great buildings make an impression\.<br\/><i>Exceptional ones make a difference\.<\/i>”<\/blockquote>/);
+  assert.doesNotMatch(css, /\.quote-mark\s*\{/);
+  for (const [width, height] of [[1440, 900], [820, 1180], [390, 844]]) {
+    const rules = resolvedRules(source, width, height, false);
+    assert.equal(rules['.philosophy-brand'].display, 'flex', 'The full brand must remain visible on smaller screens');
+    assert.equal(rules['.quote blockquote']['max-width'], '1100px');
+  }
 });
