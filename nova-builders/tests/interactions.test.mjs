@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 const source = await readFile(new URL('../dist/script.js', import.meta.url), 'utf8');
 
 // Exercise the page's event handlers without a browser or animation CDNs.
-function pageFixture({ reducedMotion = false, initialScroll = 0 } = {}) {
+function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = false } = {}) {
   const nodes = new Map();
   const frames = new Map();
   const groups = new Map();
@@ -44,6 +44,11 @@ function pageFixture({ reducedMotion = false, initialScroll = 0 } = {}) {
   document.documentElement = { scrollHeight: 10000 };
   document.getElementById = id => nodes.get(`#${id}`);
   document.createElement = () => new Element();
+  if (deferStyles) {
+    const stylesheet = new Element();
+    stylesheet.media = 'print';
+    nodes.set('[data-deferred-styles]', stylesheet);
+  }
   const window = new Element();
   window.scrollY = initialScroll; window.innerHeight = 1000;
   window.matchMedia = query => ({ matches: query.includes('prefers-reduced-motion') && reducedMotion, addEventListener() {} });
@@ -105,8 +110,8 @@ test('project enquiries retain their selection and produce a copyable local draf
   await p.projects[1].emit('click');
   assert.equal(p.nodes.get('[data-project-dialog]').open, true);
   assert.equal(p.nodes.get('[data-dialog-title]').textContent, 'Vela Residences');
-  assert.equal(p.nodes.get('[data-dialog-image]').src, './assets/vela-960.webp');
-  assert.match(p.nodes.get('[data-dialog-image]').srcset, /vela-1536\.webp 1536w/);
+  assert.equal(p.nodes.get('[data-dialog-image]').src, './assets/vela-detail-1536.webp');
+  assert.match(p.nodes.get('[data-dialog-image]').srcset, /vela-detail-1536\.webp 1536w/);
   assert.equal(p.nodes.get('[data-dialog-features]').children.length, 3);
   await p.nodes.get('[data-dialog-enquire]').emit('click');
   const form = p.nodes.get('[data-consultation-form]');
@@ -189,4 +194,26 @@ test('the model library loads once, near the studio, and failures retain a fallb
   await script.emit('load');
   assert.equal(p.nodes.get('#building-model').hidden, true);
   assert.equal(p.nodes.get('[data-model-hint]').textContent, 'Architectural concept view');
+});
+
+test('deferred CSS does not initialize scroll geometry or duplicate interactions before it is ready', async () => {
+  const p = pageFixture({ deferStyles: true });
+  const stylesheet = p.nodes.get('[data-deferred-styles]');
+  assert.equal(p.observers.length, 0);
+  assert.equal(p.nodes.get('[data-menu-toggle]').listeners.click, undefined);
+  await stylesheet.emit('load');
+  assert.equal(stylesheet.media, 'all');
+  assert.equal(p.nodes.get('[data-menu-toggle]').listeners.click.length, 1);
+  await stylesheet.emit('error');
+  assert.equal(p.nodes.get('[data-menu-toggle]').listeners.click.length, 1);
+  await p.filters[2].emit('click');
+  assert.deepEqual(p.cards.map(card => card.hidden), [true, true, false]);
+});
+
+test('a stylesheet failure still enables the page interactions safely', async () => {
+  const p = pageFixture({ deferStyles: true });
+  await p.nodes.get('[data-deferred-styles]').emit('error');
+  await p.nodes.get('[data-menu-toggle]').emit('click');
+  assert.equal(p.nodes.get('[data-mobile-menu]').inert, false);
+  assert.equal(p.video.loads, 0);
 });

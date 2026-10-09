@@ -94,6 +94,32 @@ test('responsive images are genuine WebP files and substantially smaller', async
   }
 });
 
+test('high-detail project images are separate from the lightweight hero', async () => {
+  const html = await readFile(resolve(root, 'index.html'), 'utf8');
+  const hero = html.match(/<img class="hero-poster"[^>]*>/)[0];
+  assert.doesNotMatch(hero, /-detail-/);
+  const cards = [...html.matchAll(/<img[^>]*alt="(?:The Aurelian|Vela Residences|Meridian One)[^"]*"[^>]*>/g)];
+  assert.equal(cards.length, 3);
+  for (const [card] of cards) {
+    assert.match(card, /-detail-1536\.webp/);
+    assert.match(card, /loading="lazy"/);
+    assert.match(card, /sizes="\(max-width: 640px\) 180vw/);
+  }
+  for (const name of ['aurelian', 'vela', 'meridian']) {
+    const original = await stat(resolve(root, `assets/${name}.png`));
+    for (const width of [640, 960, 1536]) {
+      const response = await fetch(`${address}/assets/${name}-detail-${width}.webp`);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('content-type'), 'image/webp');
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(bytes.toString('ascii', 8, 12), 'WEBP');
+      const lightweight = await stat(resolve(root, `assets/${name}-${width}.webp`));
+      assert.ok(bytes.length > lightweight.size, 'Detail assets must not reuse the lower-quality encoding');
+      assert.ok(bytes.length < original.size, 'Detail assets should still be smaller than the original PNG');
+    }
+  }
+});
+
 test('local font definitions point to real, correctly served WOFF2 files', async () => {
   const css = await readFile(resolve(root, 'styles.css'), 'utf8');
   const fonts = [...css.matchAll(/url\("\.\/(assets\/fonts\/[^\"]+\.woff2)"\)/g)];

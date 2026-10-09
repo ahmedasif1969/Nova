@@ -5,10 +5,201 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Nova Builders & Developers creates landmark residential and mixed-use properties shaped by enduring design, disciplined delivery, and a distinctly modern point of view." />
   <meta name="theme-color" content="#24232b" />
+  <link rel="preload" as="font" href="./assets/fonts/cormorant-garamond-latin-normal.woff2" type="font/woff2" crossorigin />
+  <link rel="preload" as="font" href="./assets/fonts/cormorant-garamond-latin-italic.woff2" type="font/woff2" crossorigin />
   <link rel="preload" as="image" href="./assets/aurelian-1536.webp" imagesrcset="./assets/aurelian-640.webp 640w, ./assets/aurelian-960.webp 960w, ./assets/aurelian-1536.webp 1536w" imagesizes="100vw" fetchpriority="high" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23151827'/%3E%3Cpath d='M15 47V17l17 18V17h17v30H36L23 33v14z' fill='%23c6a0d9'/%3E%3C/svg%3E" />
   <title>Nova Builders & Developers — Built Beyond Expectation</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <!-- Critical CSS is generated from styles.css; run npm run build:css after editing it. -->
+  <style id="critical-css">
+@font-face { font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("./assets/fonts/cormorant-garamond-latin-normal.woff2") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("./assets/fonts/cormorant-garamond-latin-italic.woff2") format("woff2"); }
+@font-face { font-family: "Manrope";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./assets/fonts/manrope-latin-normal.woff2") format("woff2"); }
+@font-face { font-family: "Cormorant Fallback";
+  font-style: normal;
+  font-weight: 400 500;
+  src: local("Times New Roman"), local("TimesNewRomanPSMT");
+  size-adjust: 94.222%;
+  ascent-override: 98.066%;
+  descent-override: 30.460%;
+  line-gap-override: 0%; }
+@font-face { font-family: "Cormorant Fallback";
+  font-style: italic;
+  font-weight: 400 500;
+  src: local("Times New Roman Italic"), local("TimesNewRomanPS-ItalicMT");
+  size-adjust: 89.401%;
+  ascent-override: 103.355%;
+  descent-override: 32.103%;
+  line-gap-override: 0%; }
+:root { --ink: #24232b;
+  --ink-soft: #2d2b34;
+  --paper: #f3f0eb;
+  --paper-deep: #e9e4de;
+  --plum: #796687;
+  --lilac: #c9b9d7;
+  --lavender: #ded5e5;
+  --line: rgba(36,35,43,.16);
+  --white-line: rgba(255,255,255,.18);
+  --pad: clamp(1.5rem, 5.6vw, 7rem);
+  --display: "Cormorant Garamond", "Cormorant Fallback", Georgia, serif;
+  --body: "Manrope", Arial, sans-serif; }
+* { box-sizing: border-box; }
+html { scroll-behavior: auto; background: var(--ink); }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); -webkit-font-smoothing: antialiased; }
+body.menu-open, body.dialog-open { overflow: hidden; }
+main, footer { overflow: clip; }
+section[id] { scroll-margin-top: 92px; }
+a { color: inherit; text-decoration: none; }
+button, input, textarea, select { font: inherit; }
+button { color: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+img, video { display: block; max-width: 100%; }
+button[hidden], [hidden] { display: none !important; }
+::selection { color: var(--ink); background: var(--lilac); }
+:focus-visible { outline: 2px solid var(--plum); outline-offset: 5px; }
+.projects :focus-visible, .hero :focus-visible, .model-showcase :focus-visible, .consultation :focus-visible { outline-color: var(--lilac); }
+.skip-link { position: fixed; left: 1rem; top: -100px; z-index: 200; padding: 1rem; background: var(--paper); }
+.skip-link:focus { top: 1rem; }
+.grain { position: fixed; z-index: 100; inset: 0; opacity: .025; pointer-events: none; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E"); }
+.progress { position: fixed; z-index: 110; inset: 0 0 auto; height: 2px; pointer-events: none; }
+.progress span { display: block; height: 100%; background: var(--lilac); transform: scaleX(0); transform-origin: left; }
+.site-header { position: fixed; inset: 0 0 auto; z-index: 90; height: 94px; padding: 0 var(--pad); display: flex; align-items: center; justify-content: space-between; gap: 2rem; color: white; border-bottom: 1px solid var(--white-line); transition: background .35s, color .35s, height .35s; }
+.site-header.scrolled { height: 76px; color: var(--ink); background: rgba(243,240,235,.95); border-color: var(--line); backdrop-filter: blur(16px); }
+.brand { display: inline-flex; align-items: center; gap: .75rem; font: 600 1.28rem/1 var(--body); letter-spacing: .1em; flex-shrink: 0; }
+.brand svg { width: 29px; height: 29px; fill: currentColor; }
+.brand small { display: block; margin-top: .35rem; font: 500 .43rem/1 var(--body); letter-spacing: .18em; }
+.site-header nav { display: flex; gap: clamp(1rem,2vw,2rem); font-size: .71rem; }
+.site-header nav a { position: relative; padding: .6rem 0; }
+.site-header nav a::after { content: ""; position: absolute; inset: auto 0 0; height: 1px; background: currentColor; transform: scaleX(0); transform-origin: right; transition: transform .3s; }
+.site-header nav a:hover::after, .site-header nav a.active::after { transform: scaleX(1); transform-origin: left; }
+.header-cta { padding: .85rem 1rem; display: flex; gap: 1.5rem; align-items: center; border: 1px solid currentColor; font-size: .7rem; transition: color .25s, background .25s; }
+.header-cta:hover { color: var(--ink); background: var(--paper); }
+.site-header.scrolled .header-cta:hover { color: var(--paper); background: var(--ink); }
+.menu-toggle { display: none; width: 44px; height: 44px; padding: 10px; border: 0; background: transparent; }
+.menu-toggle span { display: block; height: 1px; background: currentColor; margin: 7px 0; transition: transform .3s; }
+.mobile-menu { display: none; }
+.hero { height: 320vh; height: 320svh; background: var(--ink); }
+.hero-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; color: var(--paper); }
+.hero-video, .hero-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hero-video { filter: saturate(.72); }
+.hero-poster { object-position: 50% 55%; filter: saturate(.78); }
+.hero-wash { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(24,22,31,.56), rgba(24,22,31,.05) 72%), linear-gradient(0deg, rgba(24,22,31,.84), rgba(24,22,31,.02) 65%, rgba(24,22,31,.33)); }
+.hero-copy { position: absolute; z-index: 2; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 130px var(--pad) 118px; }
+.eyebrow { display: flex; align-items: center; gap: .7rem; margin: 0 0 1.65rem; font-size: .63rem; letter-spacing: .16em; text-transform: uppercase; }
+.status-dot { width: 5px; height: 5px; display: inline-block; flex-shrink: 0; border-radius: 50%; background: var(--lilac); box-shadow: 0 0 0 4px rgba(201,185,215,.12); }
+.hero h1 { margin: 0; font: 400 clamp(4rem,7.8vw,8.75rem)/.96 var(--display); letter-spacing: -.042em; }
+.hero h1 > span { display: block; }
+.hero h1 em { color: var(--lilac); font-weight: 400; }
+.hero-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 3rem; margin-top: 2.3rem; }
+.hero-intro > p { margin: 0 0 1.8rem; font-size: .82rem; line-height: 1.8; color: rgba(255,255,255,.77); }
+.hero-actions { display: flex; align-items: center; gap: 2rem; }
+.button { display: inline-flex; align-items: center; justify-content: space-between; gap: 2rem; min-height: 54px; padding: 1rem 1.3rem; border: 0; font-size: .7rem; line-height: 1.5; font-weight: 500; letter-spacing: .035em; transition: background .25s, transform .25s; }
+.button span { font-size: 1.1rem; }
+.button:hover { transform: translateY(-2px); }
+.button-primary { color: var(--ink); background: var(--lilac); }
+.button-primary:hover { background: #ded2e7; }
+.text-link { display: inline-flex; justify-content: space-between; align-items: center; gap: 2rem; padding: .6rem 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; font-size: .72rem; font-weight: 500; line-height: 1.5; }
+.text-link span { transition: transform .25s; }
+.text-link:hover span { transform: translate(3px,-3px); }
+.hero-feature { border-left: 1px solid var(--white-line); padding: .25rem 0 .25rem 1.8rem; min-width: 218px; }
+.hero-feature > span { display: block; font-size: .55rem; text-transform: uppercase; letter-spacing: .15em; opacity: .6; }
+.hero-feature strong { display: block; margin-top: .8rem; font: 400 2.15rem/1.1 var(--display); }
+.hero-feature p { display: flex; justify-content: space-between; gap: 2rem; font-size: .68rem; margin: .6rem 0 0; color: rgba(255,255,255,.7); }
+.hero-feature p span { color: var(--lilac); }
+.hero-timeline { position: absolute; z-index: 2; left: var(--pad); right: var(--pad); bottom: 32px; display: flex; gap: 1.5rem; align-items: center; font-size: .55rem; letter-spacing: .1em; text-transform: uppercase; }
+.hero-timeline > span:first-child { width: 220px; }
+.timeline-track { flex: 1; height: 1px; background: rgba(255,255,255,.25); }
+.timeline-track i { display: block; width: 100%; height: 100%; background: var(--lilac); transform-origin: left; transform: scaleX(0); }
+.hero-phase { min-width: 136px; text-align: right; }
+.hero-scroll { position: absolute; z-index: 2; right: var(--pad); top: 45%; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--white-line); border-radius: 50%; transition: background .3s; }
+.hero-scroll:hover { background: rgba(201,185,215,.2); }
+.section-kicker { margin: 0 0 2rem; font-size: .6rem; font-weight: 500; letter-spacing: .13em; text-transform: uppercase; line-height: 1.6; }
+.section-topline .section-kicker { margin: 0; }
+.model-copy > p:not(.section-kicker) { margin: 1.8rem 0 2.3rem; font-size: .78rem; color: #b7b1bc; line-height: 1.85; max-width: 370px; }
+.model-stage-top .status-dot { width: 3px; height: 3px; box-shadow: none; }
+.quote .section-kicker { margin-bottom: 2rem; color: #63596d; }
+.consultation-copy > p:not(.section-kicker) { margin: 2rem 0 3rem; max-width: 370px; font-size: .78rem; color: #b7b1bc; line-height: 1.9; }
+.enquiry-result .text-link { margin-top: .8rem; }
+.dialog-copy .section-kicker { font-size: .54rem; margin-bottom: 1rem; }
+.dialog-copy .button { width: 100%; }
+@media (min-width: 1800px) { .hero h1 { font-size: 9.5rem; } }
+@media (max-width: 1100px) { .site-header { gap: 1rem; }
+.site-header nav { gap: 1rem; }
+.header-cta { gap: .8rem; } }
+@media (max-width: 900px) { .site-header { height: 76px; }
+.site-header.scrolled { height: 68px; }
+.site-header nav, .header-cta { display: none; }
+.menu-toggle { display: block; }
+.site-header.menu-active { color: var(--paper); background: var(--ink); }
+.site-header.menu-active .menu-toggle span:first-child { transform: translateY(4px) rotate(45deg); }
+.site-header.menu-active .menu-toggle span:last-child { transform: translateY(-4px) rotate(-45deg); }
+.mobile-menu { position: fixed; z-index: 85; inset: 0; display: flex; flex-direction: column; padding: 126px var(--pad) 3rem; gap: 1.1rem; background: var(--ink); color: var(--paper); visibility: hidden; opacity: 0; transform: translateY(-20px); transition: opacity .3s, transform .3s, visibility .3s; }
+.mobile-menu.open { visibility: visible; opacity: 1; transform: translateY(0); }
+.mobile-menu .section-kicker { color: var(--lilac); margin-bottom: 1.5rem; }
+.mobile-menu > a { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--white-line); padding-bottom: 1rem; font: 400 2.5rem/1.1 var(--display); }
+.mobile-menu > a > span { font: 400 .6rem var(--body); color: var(--lilac); }
+.hero h1 { font-size: clamp(3.7rem,8.8vw,6.5rem); }
+.hero-copy { padding-top: 112px; }
+.hero-feature { display: none; }
+.hero-scroll { top: auto; bottom: 128px; } }
+@media (max-width: 640px) { :root { --pad: 1.5rem; }
+.hero { height: 270vh; height: 270svh; }
+.hero-copy { padding-bottom: 116px; }
+.hero h1 { font-size: clamp(3.2rem,12.6vw,4.8rem); line-height: 1; letter-spacing: -.038em; }
+.hero h1 span:first-child { max-width: 9ch; }
+.hero h1 span:last-child { max-width: 11ch; }
+.eyebrow { margin-bottom: 1.4rem; font-size: .53rem; }
+.hero-intro > p { font-size: .73rem; margin-bottom: 1.5rem; }
+.hero-bottom { margin-top: 1.7rem; }
+.hero-actions { flex-wrap: wrap; gap: 1.1rem 1.5rem; }
+.hero-actions .button { min-height: 48px; font-size: .64rem; padding: .8rem 1rem; gap: 1.3rem; }
+.hero-actions .text-link { font-size: .64rem; gap: .9rem; }
+.hero-scroll { display: none; }
+.hero-timeline { gap: .8rem; bottom: 24px; flex-wrap: wrap; }
+.hero-timeline > span:first-child { flex: 1; width: auto; font-size: .47rem; }
+.hero-phase { min-width: auto; font-size: .47rem; }
+.timeline-track { flex-basis: 100%; order: 3; }
+.hero-poster { object-position: 53% 50%; }
+.section-kicker { margin-bottom: 1.5rem; font-size: .53rem; }
+.model-copy > p:not(.section-kicker) { font-size: .75rem; }
+.consultation-copy > p:not(.section-kicker) { margin-bottom: 1.8rem; }
+.footer-top .brand { width: calc(100% - 80px); order: 0; } }
+@media (max-height: 700px) and (min-width: 641px) { .hero-copy { padding-top: 112px; padding-bottom: 86px; }
+.hero h1 { font-size: clamp(3rem,6.6vw,6rem); }
+.hero-bottom { margin-top: 1.5rem; }
+.hero-intro > p { margin-bottom: 1rem; }
+.hero-timeline { bottom: 24px; } }
+@media (max-height: 720px) and (max-width: 640px) { .hero-copy { padding-top: 96px; padding-bottom: 85px; }
+.hero h1 { font-size: 2.9rem; }
+.eyebrow { margin-bottom: .8rem; }
+.hero-bottom { margin-top: 1rem; }
+.hero-intro > p { margin-bottom: 1rem; } }
+@media (max-height: 520px) and (min-width: 641px) { .hero-copy { padding-top: 90px; padding-bottom: 70px; }
+.hero h1 { font-size: clamp(2.4rem,5.6vw,4rem); }
+.eyebrow, .hero-feature, .hero-intro > p, .hero-scroll { display: none; }
+.hero-bottom { margin-top: 1rem; }
+.hero-actions .button { min-height: 44px; padding: .7rem 1rem; }
+.hero-timeline { bottom: 20px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+.hero { height: 100vh; height: 100svh; }
+.hero-poster { opacity: 1 !important; }
+.hero-timeline { display: none; } }
+  </style>
+  <link rel="stylesheet" href="./deferred.css" media="print" onload="this.media='all';this.onload=null" data-deferred-styles />
+  <noscript><link rel="stylesheet" href="./styles.css" /></noscript>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
@@ -100,7 +291,7 @@
       <div class="project-list">
         <article class="project-card reveal-section" data-category="residential">
           <button class="project-image" type="button" data-project="aurelian" aria-label="Explore The Aurelian">
-            <img src="./assets/aurelian-960.webp" srcset="./assets/aurelian-640.webp 640w, ./assets/aurelian-960.webp 960w, ./assets/aurelian-1536.webp 1536w" sizes="(max-width: 640px) 90vw, (max-width: 900px) 45vw, 30vw" alt="The Aurelian luxury residential tower at blue hour" loading="lazy" decoding="async" width="1536" height="1024" />
+            <img src="./assets/aurelian-detail-1536.webp" srcset="./assets/aurelian-detail-640.webp 640w, ./assets/aurelian-detail-960.webp 960w, ./assets/aurelian-detail-1536.webp 1536w" sizes="(max-width: 640px) 180vw, (max-width: 900px) 90vw, 60vw" alt="The Aurelian luxury residential tower at blue hour" loading="lazy" decoding="async" width="1536" height="1024" />
             <span class="project-number">01</span>
             <span class="project-status">Under construction</span>
             <span class="project-action" aria-hidden="true">↗</span>
@@ -110,7 +301,7 @@
         </article>
         <article class="project-card reveal-section" data-category="residential">
           <button class="project-image" type="button" data-project="vela" aria-label="Explore Vela Residences">
-            <img src="./assets/vela-960.webp" srcset="./assets/vela-640.webp 640w, ./assets/vela-960.webp 960w, ./assets/vela-1536.webp 1536w" sizes="(max-width: 640px) 90vw, (max-width: 900px) 45vw, 30vw" alt="Vela Residences waterfront apartments at dawn" loading="lazy" decoding="async" width="1536" height="1024" />
+            <img src="./assets/vela-detail-1536.webp" srcset="./assets/vela-detail-640.webp 640w, ./assets/vela-detail-960.webp 960w, ./assets/vela-detail-1536.webp 1536w" sizes="(max-width: 640px) 180vw, (max-width: 900px) 90vw, 60vw" alt="Vela Residences waterfront apartments at dawn" loading="lazy" decoding="async" width="1536" height="1024" />
             <span class="project-number">02</span>
             <span class="project-status">In development</span>
             <span class="project-action" aria-hidden="true">↗</span>
@@ -120,7 +311,7 @@
         </article>
         <article class="project-card reveal-section" data-category="mixed">
           <button class="project-image" type="button" data-project="meridian" aria-label="Explore Meridian One">
-            <img src="./assets/meridian-960.webp" srcset="./assets/meridian-640.webp 640w, ./assets/meridian-960.webp 960w, ./assets/meridian-1536.webp 1536w" sizes="(max-width: 640px) 90vw, (max-width: 900px) 45vw, 30vw" alt="Meridian One mixed-use tower at dusk" loading="lazy" decoding="async" width="1536" height="1024" />
+            <img src="./assets/meridian-detail-1536.webp" srcset="./assets/meridian-detail-640.webp 640w, ./assets/meridian-detail-960.webp 960w, ./assets/meridian-detail-1536.webp 1536w" sizes="(max-width: 640px) 180vw, (max-width: 900px) 90vw, 60vw" alt="Meridian One mixed-use tower at dusk" loading="lazy" decoding="async" width="1536" height="1024" />
             <span class="project-number">03</span>
             <span class="project-status">Launching soon</span>
             <span class="project-action" aria-hidden="true">↗</span>
@@ -186,7 +377,7 @@
       </div>
       <div class="model-stage">
         <div class="model-stage-top"><span><i class="status-dot"></i> Live architectural study</span><span>28° N / 67° E</span></div>
-        <img class="model-fallback" src="./assets/aurelian-960.webp" srcset="./assets/aurelian-640.webp 640w, ./assets/aurelian-960.webp 960w, ./assets/aurelian-1536.webp 1536w" sizes="(max-width: 900px) 90vw, 50vw" alt="Concept view of the Nova tower" loading="lazy" decoding="async" width="1536" height="1024" />
+        <img class="model-fallback" src="./assets/aurelian-detail-1536.webp" alt="Concept view of the Nova tower" loading="lazy" decoding="async" width="1536" height="1024" />
         <canvas id="building-model" tabindex="0" aria-label="Nova Tower model. Drag horizontally or use left and right arrow keys to rotate."></canvas>
         <div class="model-caption"><span>Nova Tower / Concept 02</span><strong data-model-hint>Drag to explore · ← → to rotate</strong></div>
         <div class="model-controls" role="group" aria-label="Model controls" hidden><button type="button" data-model-rotate aria-pressed="true" disabled>Pause rotation <span aria-hidden="true">Ⅱ</span></button><button type="button" data-model-reset disabled aria-label="Reset model view">↺</button><button type="button" data-model-wireframe aria-pressed="false" disabled>Wireframe</button></div>

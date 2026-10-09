@@ -20,6 +20,29 @@
   font-display: swap;
   src: url("./assets/fonts/manrope-latin-normal.woff2") format("woff2");
 }
+/* Local Times faces are closer to Cormorant's narrow proportions than Georgia.
+   Width/vertical adjustments are measured against the actual hero text at
+   weight 400, using the original Cormorant normal and italic font metrics. */
+@font-face {
+  font-family: "Cormorant Fallback";
+  font-style: normal;
+  font-weight: 400 500;
+  src: local("Times New Roman"), local("TimesNewRomanPSMT");
+  size-adjust: 94.222%;
+  ascent-override: 98.066%;
+  descent-override: 30.460%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Cormorant Fallback";
+  font-style: italic;
+  font-weight: 400 500;
+  src: local("Times New Roman Italic"), local("TimesNewRomanPS-ItalicMT");
+  size-adjust: 89.401%;
+  ascent-override: 103.355%;
+  descent-override: 32.103%;
+  line-gap-override: 0%;
+}
 
 :root {
   --ink: #24232b;
@@ -32,7 +55,7 @@
   --line: rgba(36,35,43,.16);
   --white-line: rgba(255,255,255,.18);
   --pad: clamp(1.5rem, 5.6vw, 7rem);
-  --display: "Cormorant Garamond", Georgia, serif;
+  --display: "Cormorant Garamond", "Cormorant Fallback", Georgia, serif;
   --body: "Manrope", Arial, sans-serif;
 }
 

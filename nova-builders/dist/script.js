@@ -1,4 +1,20 @@
-(() => {
+(function initializeNova() {
+  // Unlike a normal blocking stylesheet, deferred CSS doesn't hold up defer
+  // scripts. Preserve correctly styled geometry before initializing the same
+  // animations, anchor interactions, and model. The hero is already styled.
+  const deferredStyles = document.querySelector('[data-deferred-styles]');
+  if (deferredStyles && deferredStyles.media !== 'all') {
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      deferredStyles.media = 'all';
+      initializeNova();
+    };
+    deferredStyles.addEventListener('load', start, { once: true });
+    deferredStyles.addEventListener('error', start, { once: true });
+    return;
+  }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const video = document.querySelector('.hero-video');
   const header = document.querySelector('[data-header]');
@@ -225,9 +241,10 @@
     projectDialog.querySelector('[data-dialog-description]').textContent = project.description;
     projectDialog.querySelector('[data-dialog-status]').textContent = project.status;
     const image = projectDialog.querySelector('[data-dialog-image]');
-    image.sizes = '(max-width: 900px) 92vw, 48vw';
-    image.srcset = [640, 960, 1536].map(width => `./assets/${project.image}-${width}.webp ${width}w`).join(', ');
-    image.src = `./assets/${project.image}-960.webp`;
+    // Account for the landscape image covering a tall desktop dialog panel.
+    image.sizes = '(max-width: 900px) 92vw, 990px';
+    image.srcset = [640, 960, 1536].map(width => `./assets/${project.image}-detail-${width}.webp ${width}w`).join(', ');
+    image.src = `./assets/${project.image}-detail-1536.webp`;
     image.alt = `${project.title} architectural concept`;
     const specs = projectDialog.querySelector('[data-dialog-specs]');
     specs.replaceChildren(...project.specs.map(([label, value]) => {

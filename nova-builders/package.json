@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node serve.mjs",
     "start": "node serve.mjs",
-    "check": "node --check dist/script.js && node --test tests/*.test.mjs"
+    "build:css": "node scripts/build-critical-css.mjs",
+    "check": "node scripts/build-critical-css.mjs --check && node --check dist/script.js && node --test tests/*.test.mjs"
   },
   "engines": { "node": ">=20" }
 }

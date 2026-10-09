@@ -21,10 +21,17 @@ The website source is in `nova-builders/dist/`. GSAP and Lenis load from their e
 
 ### Asset loading
 
-- Responsive WebP images replace PNGs throughout the page and project dialogs. The hero has a matching responsive preload and remains eagerly loaded.
+- Responsive WebP images replace PNGs throughout the page and project dialogs. The hero uses a separate quality-78 set with a matching responsive preload and remains eagerly loaded. Project cards, dialogs, and the studio fallback use quality-95 `*-detail-*.webp` files generated from the original PNGs. Card source sizes account for the landscape images covering portrait frames, avoiding undersized downloads.
 - Original PNGs are preserved but are no longer requested by the page. Regenerate the WebP sizes with `python nova-builders/scripts/optimize-images.py` after installing Pillow (`python -m pip install Pillow`). The preview itself still needs no installed dependencies.
 - The construction video's source is attached only after scrolling inside the hero. A direct jump to a later section, a reduced-motion preference, or a media error retains the static image without an initial video download.
 - Model construction and the Three.js download are delayed until the studio approaches the viewport. The fallback stays visible during loading or failure.
+- The normal and italic heading fonts are preloaded in the HTML. Cormorant remains the brand font, with `font-display: swap` and a locally available Times fallback whose width/baseline metrics are adjusted to reduce the visual jump. Systems without that local face retain Georgia/serif fallback.
+- First-screen styles (including responsive hero/header/mobile-menu rules and font definitions) are inlined. The remaining styles load through `deferred.css` using a non-blocking print-media link that activates on load. Browsers without JavaScript use the complete `styles.css` file. Page interactions initialize after the deferred CSS is available so scroll measurements use the intended layout. The headline animation and ScrollTrigger refresh behavior have not been changed.
+- `styles.css` is the editable source of truth. Run `npm run build:css` from `nova-builders` after CSS changes to regenerate inline critical CSS and `deferred.css`. `npm run check` also checks that those generated outputs are current.
+
+### Hero video provenance
+
+The preserved `nova-construction.mp4` is byte-for-byte identical to the supplied original: 1344×768, 24 fps, approximately 12.25 seconds. The displayed `nova-construction-scrub.mp4` was re-encoded earlier with H.264/x264 CRF 22 and a keyframe every two frames, versus the original's CRF 20 and two keyframes across the clip. It retains the same resolution/frame rate but is a lossy derivative optimized for seeking, not a lossless copy. The recent image/font/CSS changes have not re-encoded either video. CSS desaturation, a dark overlay, and full-screen cover cropping also affect its appearance.
 
 ### SEO status
 
