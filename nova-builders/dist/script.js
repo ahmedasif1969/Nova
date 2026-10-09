@@ -76,8 +76,8 @@
     });
   });
 
-  // Wait for each decode before seeking again. Intermediate scroll frames can
-  // be discarded, but the newest target is always rendered after seeked.
+  // Scroll chooses a destination; a separate, bounded catch-up loop moves the
+  // paused video toward it. A completed seek isn't necessarily a painted frame.
   const hero = document.querySelector('[data-hero]');
   const heroPoster = document.querySelector('.hero-poster');
   const heroCopy = document.querySelector('.hero-copy');
@@ -88,7 +88,105 @@
   let videoReady = false;
   let videoRequested = false;
   let scrollFrame = 0;
+  const frameDuration = 1 / 24; // The unchanged source is 24 fps.
+  const smoothingMs = 120;
+  const maxSeekStep = 3 * frameDuration;
+  let heroActive = false;
+  let scrubTime = 0;
+  let scrubFrame = 0;
+  let lastScrubTick = 0;
+  let awaitingFrame = false;
+  let framePresented = false;
+  let frameCallback = null;
+  let paintFrame = 0;
+  let seekGeneration = 0;
   const clamp = value => Math.max(0, Math.min(1, value));
+  const clearFrameWait = () => {
+    seekGeneration++;
+    if (frameCallback !== null && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(frameCallback);
+    if (paintFrame) cancelAnimationFrame(paintFrame);
+    frameCallback = null;
+    paintFrame = 0;
+    awaitingFrame = framePresented = false;
+  };
+  const stopVideoScrub = () => {
+    if (scrubFrame) cancelAnimationFrame(scrubFrame);
+    scrubFrame = 0;
+    lastScrubTick = 0;
+    scrubTime = video.currentTime || 0;
+    clearFrameWait();
+  };
+  const requestVideoUpdate = () => {
+    if (!scrubFrame && heroActive && !document.hidden && videoReady && videoDuration && !reducedMotion && !awaitingFrame && !video.seeking) {
+      scrubFrame = requestAnimationFrame(updateVideoScrub);
+    }
+  };
+  const finishFrameWait = () => {
+    clearFrameWait();
+    // Don't count time spent decoding/waiting toward the next catch-up step.
+    lastScrubTick = 0;
+    requestVideoUpdate();
+  };
+  const waitForPaintFallback = () => {
+    if (paintFrame) return;
+    const generation = seekGeneration;
+    // Race compositor acknowledgement against one paint opportunity AFTER
+    // decoding. Never add a fixed timeout to every frame of a paused video.
+    // The next seek is scheduled on the following RAF, after this paint.
+    paintFrame = requestAnimationFrame(() => {
+      paintFrame = 0;
+      if (generation === seekGeneration && awaitingFrame && !video.seeking) finishFrameWait();
+    });
+  };
+  const seekVideo = time => {
+    awaitingFrame = true;
+    framePresented = false;
+    const generation = ++seekGeneration;
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      const onFrame = (now, metadata) => {
+        if (generation !== seekGeneration || !awaitingFrame) return;
+        frameCallback = null;
+        // Ignore an old frame submitted just before this seek began.
+        if (Math.abs(metadata.mediaTime - time) < frameDuration * .75) {
+          framePresented = true;
+          if (!video.seeking) finishFrameWait();
+        } else frameCallback = video.requestVideoFrameCallback(onFrame);
+      };
+      frameCallback = video.requestVideoFrameCallback(onFrame);
+    }
+    try { video.currentTime = time; }
+    catch {
+      stopVideoScrub();
+      videoReady = false;
+      requestScrollUpdate();
+    }
+  };
+  function updateVideoScrub(now) {
+    scrubFrame = 0;
+    if (!heroActive || document.hidden || !videoReady || reducedMotion) { stopVideoScrub(); return; }
+    if (video.readyState < 2 || video.seeking || awaitingFrame) { lastScrubTick = 0; return; }
+    const lastFrame = Math.max(0, Math.floor((videoDuration - .05) / frameDuration));
+    const desiredFrame = Math.max(0, Math.min(lastFrame, Math.round(targetVideoTime / frameDuration)));
+    const currentFrame = Math.floor(video.currentTime / frameDuration + 1e-7);
+    if (currentFrame === desiredFrame) {
+      // Settle by frame identity, not exact timestamp equality. Once this frame
+      // is selected, don't issue a final corrective seek at the end of easing.
+      scrubTime = targetVideoTime;
+      lastScrubTick = 0;
+      return;
+    }
+    const elapsed = lastScrubTick ? Math.max(0, Math.min(now - lastScrubTick, 50)) : 1000 / 60;
+    lastScrubTick = now;
+    const gap = targetVideoTime - scrubTime;
+    const easedStep = gap * (1 - Math.exp(-elapsed / smoothingMs));
+    scrubTime += Math.max(-maxSeekStep, Math.min(maxSeekStep, easedStep));
+    const nextFrame = Math.max(0, Math.min(lastFrame, Math.round(scrubTime / frameDuration)));
+    if (nextFrame !== currentFrame) {
+      // Seek INSIDE the selected frame's interval. Exact frame boundaries can
+      // resolve to a neighbouring frame due to timestamp/decoder precision.
+      seekVideo(Math.min(videoDuration - .001, (nextFrame + .5) * frameDuration));
+    } else requestVideoUpdate();
+  }
   const requestHeroVideo = () => {
     if (videoRequested || reducedMotion) return;
     const source = video.querySelector('source[data-src]');
@@ -98,11 +196,6 @@
     video.preload = 'auto';
     video.load();
   };
-  const seekVideo = () => {
-    if (!videoDuration || video.readyState < 2 || video.seeking || reducedMotion) return;
-    if (Math.abs(video.currentTime - targetVideoTime) < 1 / 48) return;
-    video.currentTime = targetVideoTime;
-  };
   const updateScroll = () => {
     scrollFrame = 0;
     const y = window.scrollY;
@@ -111,6 +204,7 @@
     // Read geometry before writing styles, rather than forcing another layout.
     const heroTop = hero.offsetTop;
     const heroHeight = hero.offsetHeight;
+    heroActive = y >= heroTop && y < heroTop + heroHeight;
     const p = clamp((y - heroTop) / Math.max(1, heroHeight - viewport));
     progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
     header.classList.toggle('scrolled', y > 80);
@@ -127,8 +221,10 @@
       heroCopy.inert = copyOpacity < .05;
       if (videoDuration) {
         const videoProgress = clamp((p - .035) / .965);
-        targetVideoTime = Math.min(videoDuration - .05, Math.round(videoProgress * (videoDuration - .05) * 24) / 24);
-        seekVideo();
+        const lastFrameTime = Math.floor((videoDuration - .05) / frameDuration) * frameDuration;
+        targetVideoTime = Math.min(lastFrameTime, Math.round(videoProgress * (videoDuration - .05) / frameDuration) * frameDuration);
+        if (heroActive) requestVideoUpdate();
+        else stopVideoScrub();
       }
     }
   };
@@ -142,11 +238,20 @@
   };
   if (video.readyState >= 1) enableVideoScrub();
   else video.addEventListener('loadedmetadata', enableVideoScrub, { once: true });
-  const markVideoReady = () => { videoReady = true; requestScrollUpdate(); };
+  const markVideoReady = () => { videoReady = true; scrubTime = video.currentTime || 0; requestScrollUpdate(); };
   if (video.readyState >= 2) markVideoReady();
   video.addEventListener('loadeddata', markVideoReady, { once: true });
-  video.addEventListener('seeked', seekVideo);
-  video.addEventListener('error', () => { videoReady = false; requestScrollUpdate(); });
+  video.addEventListener('seeked', () => {
+    if (!awaitingFrame) { requestVideoUpdate(); return; }
+    if (framePresented) finishFrameWait();
+    else waitForPaintFallback();
+  });
+  video.addEventListener('canplay', requestVideoUpdate);
+  video.addEventListener('error', () => { videoReady = false; stopVideoScrub(); requestScrollUpdate(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopVideoScrub();
+    else requestScrollUpdate();
+  });
   window.addEventListener('scroll', requestScrollUpdate, { passive: true });
   window.addEventListener('resize', requestScrollUpdate, { passive: true });
   updateScroll();

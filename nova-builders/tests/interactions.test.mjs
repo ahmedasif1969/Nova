@@ -6,12 +6,16 @@ import { runInNewContext } from 'node:vm';
 const source = await readFile(new URL('../dist/script.js', import.meta.url), 'utf8');
 
 // Exercise the page's event handlers without a browser or animation CDNs.
-function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = false } = {}) {
+function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = false, frameCallbacks = true } = {}) {
   const nodes = new Map();
   const frames = new Map();
+  const videoFrames = new Map();
+  const timers = new Map();
   const groups = new Map();
   const observers = [];
   let frameId = 0;
+  let timerId = 0;
+  let clock = 0;
   let document;
   class Element {
     constructor() {
@@ -68,6 +72,10 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   let currentTime = 0;
   video.seeks = [];
   Object.defineProperty(video, 'currentTime', { get: () => currentTime, set: time => { currentTime = time; video.seeking = true; video.seeks.push(time); } });
+  if (frameCallbacks) {
+    video.requestVideoFrameCallback = callback => { videoFrames.set(++frameId, callback); return frameId; };
+    video.cancelVideoFrameCallback = id => videoFrames.delete(id);
+  }
   const filters = ['all', 'residential', 'mixed'].map(value => { const node = new Element(); node.dataset.filter = value; return node; });
   const cards = ['residential', 'residential', 'mixed'].map(value => { const node = new Element(); node.dataset.category = value; return node; });
   const projects = ['aurelian', 'vela', 'meridian'].map(value => { const node = new Element(); node.dataset.project = value; return node; });
@@ -83,11 +91,35 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     window, document, history: { replaceState() {} },
     navigator: { clipboard: { writeText: async text => { clipboard = text; } } },
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
+    cancelAnimationFrame: id => frames.delete(id),
+    setTimeout: (callback, delay) => { timers.set(++timerId, { callback, at: clock + delay }); return timerId; },
+    clearTimeout: id => timers.delete(id),
     IntersectionObserver: Observer,
     FormData: class { get(key) { return key === 'project' ? form.elements.project.value : formData[key]; } },
   });
-  const flush = () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback()); };
-  return { nodes, filters, cards, projects, window, document, video, videoSource, observers, flush, clipboard: () => clipboard };
+  const advance = milliseconds => {
+    clock += milliseconds;
+    for (const [id, timer] of [...timers]) if (timer.at <= clock) { timers.delete(id); timer.callback(); }
+  };
+  const flush = (milliseconds = 1000 / 60) => { advance(milliseconds); const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(clock)); };
+  const presentFrame = (mediaTime = Math.floor(currentTime * 24 + 1e-8) / 24) => {
+    const pending = [...videoFrames.values()]; videoFrames.clear();
+    pending.forEach(callback => callback(clock, { mediaTime }));
+  };
+  return { nodes, filters, cards, projects, window, document, video, videoSource, observers, frames, videoFrames, timers, flush, advance, presentFrame, clipboard: () => clipboard };
+}
+
+async function startScrub(p, scroll = 400) {
+  p.video.readyState = 2;
+  await p.video.emit('loadedmetadata'); await p.video.emit('loadeddata');
+  p.window.scrollY = scroll; await p.window.emit('scroll'); p.flush(); p.flush();
+}
+
+async function settleScrub(p, cycles = 250) {
+  for (let i = 0; i < cycles; i++) {
+    if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
+    p.presentFrame(); p.flush();
+  }
 }
 
 test('CDN failures preserve project filtering and the architectural fallback', async () => {
@@ -135,20 +167,145 @@ test('Escape restores the mobile menu’s focus and scrolling state', async () =
   assert.equal(p.document.activeElement, p.nodes.get('[data-menu-toggle]'));
 });
 
-test('rapid scrolling waits for decoding and then seeks to the newest target', async () => {
+test('rapid scrolling catches up in bounded steps after both decoding and presentation', async () => {
   const p = pageFixture();
-  p.video.readyState = 2;
-  await p.video.emit('loadedmetadata'); await p.video.emit('loadeddata');
-  p.window.scrollY = 400; await p.window.emit('scroll'); p.flush();
+  await startScrub(p);
   assert.equal(p.video.seeks.length, 1);
+  assert.ok(Math.floor(p.video.seeks[0] * 24) <= 3, 'Do not jump more than three source frames toward the destination');
   p.window.scrollY = 1000; await p.window.emit('scroll'); p.flush();
   p.window.scrollY = 1800; await p.window.emit('scroll'); p.flush();
   assert.equal(p.video.seeks.length, 1, 'Do not interrupt an in-flight decode');
   p.video.seeking = false; await p.video.emit('seeked');
+  assert.equal(p.video.seeks.length, 1, 'Seeked alone must not chain a new seek');
+  p.presentFrame(0);
+  assert.equal(p.video.seeks.length, 1, 'A stale compositor frame must not release the pending seek');
+  p.presentFrame(); p.flush();
   assert.equal(p.video.seeks.length, 2);
-  assert.ok(p.video.seeks[1] > 8 && p.video.seeks[1] < 10, 'The latest scroll target must not be dropped');
+  assert.ok(p.video.seeks[1] - p.video.seeks[0] <= 3 / 24 + 1e-9);
+  await settleScrub(p);
+  assert.ok(p.video.currentTime > 8 && p.video.currentTime < 10, 'Eventually reach the latest destination, even after scrolling stops');
+  for (let i = 1; i < p.video.seeks.length; i++) assert.ok(p.video.seeks[i] - p.video.seeks[i - 1] <= 3 / 24 + 1e-9);
+  assert.equal(p.frames.size + p.videoFrames.size + p.timers.size, 0, 'Settled video must not keep polling');
   await p.video.emit('error'); p.flush();
   assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+});
+
+test('seeks select the interior of a source frame instead of an ambiguous frame boundary', async () => {
+  const p = pageFixture(); await startScrub(p, 1000);
+  await settleScrub(p);
+  assert.ok(p.video.seeks.length > 5);
+  for (const time of p.video.seeks) {
+    const fraction = time * 24 - Math.floor(time * 24);
+    assert.ok(Math.abs(fraction - .5) < 1e-8, `Seek ${time} must land inside a frame, not on its edge`);
+  }
+});
+
+test('once the intended frame is selected, idle events do not trigger a final corrective seek', async () => {
+  for (const position of [400, 405.2, 999.95, 1000.05, 1800]) {
+    const p = pageFixture(); await startScrub(p, position); await settleScrub(p);
+    const expected = Math.round(Math.max(0, (position / 2000 - .035) / .965) * 9.95 * 24);
+    const displayed = Math.floor(p.video.currentTime * 24 + 1e-8);
+    assert.equal(displayed, expected);
+    const count = p.video.seeks.length;
+    for (let tick = 0; tick < 12; tick++) {
+      await p.video.emit('canplay'); await p.video.emit('seeked');
+      await p.window.emit('scroll'); p.flush(); p.flush();
+    }
+    assert.equal(p.video.seeks.length, count, 'No terminal correction after the video is already resting');
+    assert.equal(p.frames.size + p.videoFrames.size, 0);
+  }
+});
+
+test('reversing direction smoothly reaches the new destination without a stale forward jump', async () => {
+  const p = pageFixture(); await startScrub(p, 1600);
+  await settleScrub(p, 15);
+  const before = p.video.currentTime;
+  assert.ok(before > 1);
+  p.window.scrollY = 100; await p.window.emit('scroll'); p.flush();
+  if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
+  p.presentFrame(); p.flush();
+  assert.ok(p.video.currentTime < before);
+  await settleScrub(p);
+  assert.ok(p.video.currentTime < .2);
+  for (let i = 1; i < p.video.seeks.length; i++) assert.ok(Math.abs(p.video.seeks[i] - p.video.seeks[i - 1]) <= 3 / 24 + 1e-9);
+});
+
+test('frame presentation before seeked still waits for the decode to finish', async () => {
+  const p = pageFixture(); await startScrub(p);
+  p.presentFrame(); p.flush();
+  assert.equal(p.video.seeks.length, 1);
+  p.video.seeking = false; await p.video.emit('seeked'); p.flush();
+  assert.equal(p.video.seeks.length, 2);
+});
+
+test('browsers without frame callbacks leave a paint opportunity between seeks', async () => {
+  const p = pageFixture({ frameCallbacks: false }); await startScrub(p);
+  p.video.seeking = false; await p.video.emit('seeked');
+  assert.equal(p.video.seeks.length, 1);
+  p.flush(); assert.equal(p.video.seeks.length, 1);
+  p.flush(); assert.equal(p.video.seeks.length, 2);
+});
+
+test('missing frame callbacks do not impose a 120 ms pause after every decoded frame', async () => {
+  const p = pageFixture(); await startScrub(p, 1000);
+  p.video.seeking = false; await p.video.emit('seeked');
+  p.flush();
+  assert.equal(p.video.seeks.length, 1, 'Leave one browser paint opportunity');
+  p.flush();
+  assert.equal(p.video.seeks.length, 2, 'Resume within two display ticks, without waiting for a missing callback');
+});
+
+test('missing compositor callbacks no longer throttle the controller to single-digit updates', async () => {
+  const p = pageFixture(); await startScrub(p, 1800);
+  const start = p.video.seeks.length;
+  // Idealized fast decode, 60 Hz display, and no compositor callbacks. This
+  // measures OUR scheduler's ceiling, not real device decode/render speed.
+  for (let tick = 0; tick < 60; tick++) {
+    if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
+    p.flush();
+  }
+  const updates = p.video.seeks.length - start;
+  assert.ok(updates >= 24, `Expected at least 24 opportunities in one simulated second, got ${updates}`);
+  assert.equal(p.timers.size, 0);
+});
+
+test('a missing paused-video callback cannot deadlock or interrupt an active seek', async () => {
+  const p = pageFixture(); await startScrub(p);
+  p.advance(1000); p.flush();
+  assert.equal(p.video.seeks.length, 1, 'Paint fallback must never run while decoding');
+  p.video.seeking = false; await p.video.emit('seeked');
+  p.flush(); p.flush();
+  assert.equal(p.video.seeks.length, 2);
+  assert.ok(p.video.seeks[1] - p.video.seeks[0] <= 3 / 24 + 1e-9, 'A long pause must not turn into a large catch-up jump');
+  assert.equal(p.videoFrames.size, 1, 'Abandoned frame callback must be cancelled');
+});
+
+test('leaving the hero or hiding the tab cancels video work and resumes safely on return', async () => {
+  const p = pageFixture(); await startScrub(p);
+  const oldCallback = [...p.videoFrames.values()][0];
+  p.window.scrollY = 5000; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.videoFrames.size + p.timers.size + p.frames.size, 0);
+  p.video.seeking = false; await p.video.emit('seeked'); p.flush();
+  assert.equal(p.video.seeks.length, 1);
+  p.window.scrollY = 800; await p.window.emit('scroll'); p.flush(); p.flush();
+  assert.equal(p.video.seeks.length, 2);
+  oldCallback(0, { mediaTime: p.video.currentTime }); p.flush();
+  assert.equal(p.video.seeks.length, 2, 'A late cancelled callback must not unlock a newer seek');
+  p.document.hidden = true; await p.document.emit('visibilitychange');
+  assert.equal(p.videoFrames.size + p.timers.size + p.frames.size, 0);
+  p.video.seeking = false; await p.video.emit('seeked');
+  p.document.hidden = false; await p.document.emit('visibilitychange'); p.flush(); p.flush();
+  assert.equal(p.video.seeks.length, 3);
+});
+
+test('temporarily unavailable frames wait for canplay without busy polling', async () => {
+  const p = pageFixture(); await startScrub(p);
+  p.video.seeking = false; p.video.readyState = 1;
+  await p.video.emit('seeked'); p.presentFrame(); p.flush();
+  assert.equal(p.frames.size, 0);
+  assert.equal(p.video.seeks.length, 1);
+  p.video.readyState = 2; await p.video.emit('canplay'); p.flush();
+  assert.equal(p.video.seeks.length, 2);
 });
 
 test('the video is requested once, only after scrolling inside the hero', async () => {
