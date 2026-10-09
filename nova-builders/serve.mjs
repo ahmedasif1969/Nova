@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const filePath = fileURLToPath(import.meta.url);
 const defaultRoot = resolve(dirname(filePath), 'dist');
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp4': 'video/mp4' };
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.woff2': 'font/woff2' };
 
 // Byte-range support lets the browser seek the construction video without
 // downloading it again. This preview binds to loopback only.

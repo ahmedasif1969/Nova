@@ -6,10 +6,11 @@ import { runInNewContext } from 'node:vm';
 const source = await readFile(new URL('../dist/script.js', import.meta.url), 'utf8');
 
 // Exercise the page's event handlers without a browser or animation CDNs.
-function pageFixture() {
+function pageFixture({ reducedMotion = false, initialScroll = 0 } = {}) {
   const nodes = new Map();
   const frames = new Map();
   const groups = new Map();
+  const observers = [];
   let frameId = 0;
   let document;
   class Element {
@@ -39,15 +40,26 @@ function pageFixture() {
   selectors.forEach(selector => nodes.set(selector, new Element()));
   document = new Element();
   document.body = new Element();
+  document.head = new Element();
   document.documentElement = { scrollHeight: 10000 };
   document.getElementById = id => nodes.get(`#${id}`);
   document.createElement = () => new Element();
   const window = new Element();
-  window.scrollY = 0; window.innerHeight = 1000;
-  window.matchMedia = () => ({ matches: false, addEventListener() {} });
+  window.scrollY = initialScroll; window.innerHeight = 1000;
+  window.matchMedia = query => ({ matches: query.includes('prefers-reduced-motion') && reducedMotion, addEventListener() {} });
+  class Observer {
+    constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); }
+    observe(target) { this.targets.push(target); }
+    disconnect() { this.disconnected = true; }
+    trigger(target, isIntersecting = true) { this.callback([{ target, isIntersecting }]); }
+  }
+  window.IntersectionObserver = Observer;
   const hero = nodes.get('[data-hero]'); hero.offsetTop = 0; hero.offsetHeight = 3000;
   const video = nodes.get('.hero-video');
   video.readyState = 0; video.duration = 10; video.seeking = false; video.pause = () => {};
+  const videoSource = new Element(); videoSource.dataset.src = './assets/nova-construction-scrub.mp4';
+  nodes.set('source[data-src]', videoSource);
+  video.loads = 0; video.load = () => { video.loads++; };
   let currentTime = 0;
   video.seeks = [];
   Object.defineProperty(video, 'currentTime', { get: () => currentTime, set: time => { currentTime = time; video.seeking = true; video.seeks.push(time); } });
@@ -66,15 +78,19 @@ function pageFixture() {
     window, document, history: { replaceState() {} },
     navigator: { clipboard: { writeText: async text => { clipboard = text; } } },
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
-    IntersectionObserver: class { observe() {} },
+    IntersectionObserver: Observer,
     FormData: class { get(key) { return key === 'project' ? form.elements.project.value : formData[key]; } },
   });
   const flush = () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback()); };
-  return { nodes, filters, cards, projects, window, document, video, flush, clipboard: () => clipboard };
+  return { nodes, filters, cards, projects, window, document, video, videoSource, observers, flush, clipboard: () => clipboard };
 }
 
 test('CDN failures preserve project filtering and the architectural fallback', async () => {
   const p = pageFixture();
+  assert.equal(p.document.head.children.length, 0, 'Three.js must not download at startup');
+  const observer = p.observers.find(observer => observer.options.rootMargin === '300px');
+  observer.trigger(p.nodes.get('#model-study'));
+  await p.document.head.children[0].emit('error');
   assert.equal(p.nodes.get('#building-model').hidden, true);
   assert.equal(p.nodes.get('[data-model-hint]').textContent, 'Architectural concept view');
   await p.filters[2].emit('click');
@@ -89,6 +105,8 @@ test('project enquiries retain their selection and produce a copyable local draf
   await p.projects[1].emit('click');
   assert.equal(p.nodes.get('[data-project-dialog]').open, true);
   assert.equal(p.nodes.get('[data-dialog-title]').textContent, 'Vela Residences');
+  assert.equal(p.nodes.get('[data-dialog-image]').src, './assets/vela-960.webp');
+  assert.match(p.nodes.get('[data-dialog-image]').srcset, /vela-1536\.webp 1536w/);
   assert.equal(p.nodes.get('[data-dialog-features]').children.length, 3);
   await p.nodes.get('[data-dialog-enquire]').emit('click');
   const form = p.nodes.get('[data-consultation-form]');
@@ -126,4 +144,49 @@ test('rapid scrolling waits for decoding and then seeks to the newest target', a
   assert.ok(p.video.seeks[1] > 8 && p.video.seeks[1] < 10, 'The latest scroll target must not be dropped');
   await p.video.emit('error'); p.flush();
   assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+});
+
+test('the video is requested once, only after scrolling inside the hero', async () => {
+  const p = pageFixture();
+  assert.equal(p.videoSource.src, undefined);
+  assert.equal(p.video.loads, 0);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+  p.window.scrollY = 400; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.videoSource.src, './assets/nova-construction-scrub.mp4');
+  assert.equal(p.video.preload, 'auto');
+  assert.equal(p.video.loads, 1);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1', 'Keep cover until frames are decoded');
+  p.window.scrollY = 800; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.video.loads, 1, 'Scrolling must not repeatedly restart the download');
+});
+
+test('direct section jumps and reduced motion do not request the video', async () => {
+  const jumped = pageFixture({ initialScroll: 5000 });
+  assert.equal(jumped.video.loads, 0);
+  jumped.window.scrollY = 800; await jumped.window.emit('scroll'); jumped.flush();
+  assert.equal(jumped.video.loads, 1, 'Returning to the hero still enables scrubbing');
+  const reduced = pageFixture({ reducedMotion: true });
+  reduced.window.scrollY = 800; await reduced.window.emit('scroll'); reduced.flush();
+  assert.equal(reduced.video.loads, 0);
+  assert.equal(reduced.videoSource.src, undefined);
+});
+
+test('the model library loads once, near the studio, and failures retain a fallback', async () => {
+  const p = pageFixture();
+  const observer = p.observers.find(observer => observer.options.rootMargin === '300px');
+  const section = p.nodes.get('#model-study');
+  observer.trigger(section, false);
+  assert.equal(p.document.head.children.length, 0);
+  observer.trigger(section);
+  assert.equal(observer.disconnected, true);
+  const script = p.document.head.children[0];
+  assert.match(script.src, /three@0\.149\.0/);
+  assert.equal(script.async, true);
+  assert.equal(p.nodes.get('[data-model-hint]').textContent, 'Loading architectural study…');
+  observer.trigger(section);
+  assert.equal(p.document.head.children.length, 1);
+  // Even an apparent load that doesn't expose THREE must fail safely.
+  await script.emit('load');
+  assert.equal(p.nodes.get('#building-model').hidden, true);
+  assert.equal(p.nodes.get('[data-model-hint]').textContent, 'Architectural concept view');
 });

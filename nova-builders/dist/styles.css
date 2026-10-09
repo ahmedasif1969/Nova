@@ -1,3 +1,26 @@
+/* Same typefaces and weights, hosted locally instead of blocking on Google CSS. */
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("./assets/fonts/cormorant-garamond-latin-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("./assets/fonts/cormorant-garamond-latin-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("./assets/fonts/manrope-latin-normal.woff2") format("woff2");
+}
+
 :root {
   --ink: #24232b;
   --ink-soft: #2d2b34;

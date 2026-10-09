@@ -58,3 +58,57 @@ test('the static preview cannot accept forms or serve files outside dist', async
   assert.equal((await fetch(`${address}/.git/config`)).status, 404);
   assert.equal((await fetch(`${address}/%2e%2e%5cpackage.json`)).status, 404);
 });
+
+test('initial HTML keeps heavy media out of the critical load', async () => {
+  const html = await readFile(resolve(root, 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /fonts\.(googleapis|gstatic)\.com/);
+  assert.doesNotMatch(html, /<script[^>]+three[^>]+>/);
+  assert.doesNotMatch(html, /\.png["\s]/);
+  const video = html.match(/<video\b[^>]*>([\s\S]*?)<\/video>/);
+  assert.ok(video);
+  assert.match(video[0], /preload="none"/);
+  assert.doesNotMatch(video[0], /(?:\s|<)src="/);
+  assert.match(video[0], /data-src="\.\/assets\/nova-construction-scrub\.mp4"/);
+  const hero = html.match(/<img class="hero-poster"[^>]*>/)[0];
+  const preload = html.match(/<link rel="preload" as="image"[^>]*>/)[0];
+  assert.doesNotMatch(hero, /loading="lazy"/);
+  assert.match(hero, /fetchpriority="high"/);
+  assert.equal(hero.match(/\ssrcset="([^"]+)"/)[1], preload.match(/imagesrcset="([^"]+)"/)[1]);
+  assert.equal(hero.match(/\ssizes="([^"]+)"/)[1], preload.match(/imagesizes="([^"]+)"/)[1]);
+  assert.doesNotMatch(html.match(/<img data-dialog-image[^>]*>/)[0], /\ssrc="/);
+});
+
+test('responsive images are genuine WebP files and substantially smaller', async () => {
+  for (const name of ['aurelian', 'vela', 'meridian']) {
+    const original = await stat(resolve(root, `assets/${name}.png`));
+    for (const width of [640, 960, 1536]) {
+      const path = `assets/${name}-${width}.webp`;
+      const response = await fetch(`${address}/${path}`);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('content-type'), 'image/webp');
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+      assert.equal(bytes.toString('ascii', 8, 12), 'WEBP');
+      assert.ok(bytes.length < original.size * .1, `${path} should be at least 90% smaller`);
+    }
+  }
+});
+
+test('local font definitions point to real, correctly served WOFF2 files', async () => {
+  const css = await readFile(resolve(root, 'styles.css'), 'utf8');
+  const fonts = [...css.matchAll(/url\("\.\/(assets\/fonts\/[^\"]+\.woff2)"\)/g)];
+  assert.equal(fonts.length, 3);
+  assert.equal((css.match(/font-display: swap/g) || []).length, 3);
+  for (const [, path] of fonts) {
+    const response = await fetch(`${address}/${path}`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'font/woff2');
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.toString('ascii', 0, 4), 'wOF2');
+    assert.ok(bytes.length > 10000 && bytes.length < 50000);
+  }
+  for (const family of ['CormorantGaramond', 'Manrope']) {
+    const license = await readFile(resolve(root, `assets/fonts/${family}-OFL.txt`), 'utf8');
+    assert.match(license, /SIL OPEN FONT LICENSE/);
+  }
+});

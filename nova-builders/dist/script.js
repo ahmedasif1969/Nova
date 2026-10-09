@@ -70,8 +70,18 @@
   let videoDuration = 0;
   let targetVideoTime = 0;
   let videoReady = false;
+  let videoRequested = false;
   let scrollFrame = 0;
   const clamp = value => Math.max(0, Math.min(1, value));
+  const requestHeroVideo = () => {
+    if (videoRequested || reducedMotion) return;
+    const source = video.querySelector('source[data-src]');
+    if (!source || !source.dataset.src) return;
+    videoRequested = true;
+    source.src = source.dataset.src;
+    video.preload = 'auto';
+    video.load();
+  };
   const seekVideo = () => {
     if (!videoDuration || video.readyState < 2 || video.seeking || reducedMotion) return;
     if (Math.abs(video.currentTime - targetVideoTime) < 1 / 48) return;
@@ -82,12 +92,18 @@
     const y = window.scrollY;
     const viewport = window.innerHeight;
     const pageRange = Math.max(1, document.documentElement.scrollHeight - viewport);
+    // Read geometry before writing styles, rather than forcing another layout.
+    const heroTop = hero.offsetTop;
+    const heroHeight = hero.offsetHeight;
+    const p = clamp((y - heroTop) / Math.max(1, heroHeight - viewport));
     progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
     header.classList.toggle('scrolled', y > 80);
-    const p = clamp((y - hero.offsetTop) / Math.max(1, hero.offsetHeight - viewport));
     buildProgress.style.transform = `scaleX(${p})`;
     buildPhase.textContent = p < .2 ? '01 / The vision' : p < .65 ? '02 / Taking shape' : p < .94 ? '03 / Every detail' : '04 / A new landmark';
     if (!reducedMotion) {
+      // No media URL is attached until the visitor scrolls inside the hero.
+      // Jumping directly to another section must not start a 29 MB download.
+      if (p > 0 && y < heroTop + heroHeight) requestHeroVideo();
       heroPoster.style.opacity = videoReady ? String(1 - clamp((p - .035) / .13)) : '1';
       const copyOpacity = 1 - clamp((p - .12) / .38);
       heroCopy.style.opacity = String(copyOpacity);
@@ -209,7 +225,9 @@
     projectDialog.querySelector('[data-dialog-description]').textContent = project.description;
     projectDialog.querySelector('[data-dialog-status]').textContent = project.status;
     const image = projectDialog.querySelector('[data-dialog-image]');
-    image.src = `./assets/${project.image}.png`;
+    image.sizes = '(max-width: 900px) 92vw, 48vw';
+    image.srcset = [640, 960, 1536].map(width => `./assets/${project.image}-${width}.webp ${width}w`).join(', ');
+    image.src = `./assets/${project.image}-960.webp`;
     image.alt = `${project.title} architectural concept`;
     const specs = projectDialog.querySelector('[data-dialog-specs]');
     specs.replaceChildren(...project.specs.map(([label, value]) => {
@@ -523,7 +541,44 @@
     requestAnimationFrame(render);
   };
 
-  initBuildingModel();
+  // Download Three.js and construct the tower only near its own section.
+  // A concept image remains available while loading or if WebGL/CDN fails.
+  const modelSection = document.querySelector('#model-study');
+  if (modelSection) {
+    let modelRequested = false;
+    const showModelFallback = () => {
+      document.querySelector('#building-model').hidden = true;
+      document.querySelector('.model-stage').classList.remove('ready');
+      document.querySelector('[data-model-hint]').textContent = 'Architectural concept view';
+    };
+    const loadModel = () => {
+      if (modelRequested) return;
+      modelRequested = true;
+      const startModel = () => {
+        try { initBuildingModel(); }
+        catch { showModelFallback(); }
+      };
+      if (window.THREE) { startModel(); return; }
+      document.querySelector('[data-model-hint]').textContent = 'Loading architectural study…';
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js';
+      script.async = true;
+      script.addEventListener('load', startModel, { once: true });
+      script.addEventListener('error', showModelFallback, { once: true });
+      document.head.append(script);
+    };
+    if ('IntersectionObserver' in window) {
+      const modelObserver = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        modelObserver.disconnect();
+        loadModel();
+      }, { rootMargin: '300px' });
+      modelObserver.observe(modelSection);
+    } else {
+      // Older browsers keep a working model without the loading optimization.
+      loadModel();
+    }
+  }
 
   form.addEventListener('submit', event => {
     event.preventDefault();
