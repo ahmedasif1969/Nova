@@ -6,13 +6,16 @@ import { runInNewContext } from 'node:vm';
 const source = await readFile(new URL('../dist/script.js', import.meta.url), 'utf8');
 
 // Exercise the page's event handlers without a browser or animation CDNs.
-function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = false, frameCallbacks = true } = {}) {
+function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = false, frameCallbacks = true, motionLibrary = false, sequenceLibrary = false, width = 1440, height = 1000, pinnedHeight = 650 } = {}) {
   const nodes = new Map();
   const frames = new Map();
   const videoFrames = new Map();
   const timers = new Map();
   const groups = new Map();
   const observers = [];
+  const motionCalls = [];
+  const mediaRegistrations = [];
+  const pins = [];
   let frameId = 0;
   let timerId = 0;
   let clock = 0;
@@ -28,12 +31,14 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     getAttribute(k) { return this.attributes[k] ?? null; }
     removeAttribute(k) { delete this.attributes[k]; }
     addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
+    removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter(listener => listener !== fn); }
     async emit(type, details = {}) { for (const fn of this.listeners[type] || []) await fn({ target: this, preventDefault() {}, ...details }); }
     querySelector(selector) { return nodes.get(selector) ?? groups.get(selector)?.[0] ?? null; }
     querySelectorAll(selector) { return groups.get(selector) ?? []; }
     focus() { document.activeElement = this; }
     select() { this.selected = true; }
     append(...children) { this.children.push(...children); }
+    contains(node) { return this === node || this.children.some(child => child.contains?.(node)); }
     replaceChildren(...children) { this.children = children; }
     showModal() { this.open = true; }
     close() { this.open = false; queueMicrotask(() => this.emit('close')); }
@@ -48,14 +53,29 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   document.documentElement = { scrollHeight: 10000 };
   document.getElementById = id => nodes.get(`#${id}`);
   document.createElement = () => new Element();
+  document.createTextNode = text => ({ textContent: text });
+  document.fonts = { ready: Promise.resolve() };
   if (deferStyles) {
     const stylesheet = new Element();
     stylesheet.media = 'print';
     nodes.set('[data-deferred-styles]', stylesheet);
   }
   const window = new Element();
-  window.scrollY = initialScroll; window.innerHeight = 1000;
-  window.matchMedia = query => ({ matches: query.includes('prefers-reduced-motion') && reducedMotion, addEventListener() {} });
+  window.scrollY = initialScroll; window.innerHeight = height; window.innerWidth = width;
+  let sequenceCallbacks;
+  const sequenceCalls = [];
+  if (sequenceLibrary) {
+    window.NovaHeroSequence = options => {
+      sequenceCallbacks = options;
+      return { setProgress(p, active) { sequenceCalls.push({ p, active }); }, resize() {} };
+    };
+  }
+  const matchesMedia = query => {
+    if (query.includes('prefers-reduced-motion: no-preference') && reducedMotion) return false;
+    if (query.includes('prefers-reduced-motion: reduce') && !reducedMotion) return false;
+    return [...query.matchAll(/\(min-(width|height): (\d+)px\)/g)].every(([, axis, value]) => (axis === 'width' ? width : height) >= Number(value));
+  };
+  window.matchMedia = query => ({ matches: matchesMedia(query), addEventListener() {} });
   class Observer {
     constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); }
     observe(target) { this.targets.push(target); }
@@ -63,6 +83,34 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     trigger(target, isIntersecting = true) { this.callback([{ target, isIntersecting }]); }
   }
   window.IntersectionObserver = Observer;
+  const materialAccordion = new Element();
+  const materials = [0, 1, 2].map(() => {
+    const panel = new Element(); const button = new Element(); const detail = new Element();
+    panel.append(button, detail);
+    panel.querySelector = selector => selector === '[data-material-toggle]' ? button : detail;
+    return { panel, button, detail };
+  });
+  materialAccordion.append(...materials.map(material => material.panel));
+  materialAccordion.querySelectorAll = () => materials.map(material => material.panel);
+  nodes.set('[data-material-accordion]', materialAccordion);
+  const marquee = new Element(); const marqueeTrack = new Element(); const marqueeToggle = new Element();
+  marquee.querySelector = () => marqueeTrack;
+  nodes.set('[data-principles-marquee]', marquee); nodes.set('[data-marquee-toggle]', marqueeToggle);
+  const paragraph = new Element(); paragraph.textContent = 'The light. The proportions. The quiet details.';
+  groups.set('[data-word-reveal]', [paragraph]);
+  const approach = new Element(); const pinned = new Element(); const steps = new Element();
+  pinned.offsetHeight = pinnedHeight; steps.offsetHeight = 1100;
+  nodes.set('.approach', approach); nodes.set('.approach-sticky', pinned); nodes.set('.approach-steps', steps);
+  let gsap; let ScrollTrigger;
+  if (motionLibrary) {
+    const tween = (target, config) => {
+      const instance = { paused: !!config.paused, play() { this.paused = false; }, pause() { this.paused = true; } };
+      motionCalls.push({ target, config, instance }); return instance;
+    };
+    gsap = { registerPlugin() {}, from(target, config) { return tween(target, config); }, fromTo(target, from, config) { motionCalls.push({ target, from, config }); }, to: tween, set() {}, killTweensOf() {}, timeline() { return { to() { return this; } }; }, matchMedia() { return { add(query, callback) { const registration = { query, cleanup: matchesMedia(query) ? callback() : undefined }; mediaRegistrations.push(registration); } }; } };
+    ScrollTrigger = { refresh() {}, update() {}, create(config) { pins.push(config); } };
+    window.gsap = gsap; window.ScrollTrigger = ScrollTrigger;
+  }
   const hero = nodes.get('[data-hero]'); hero.offsetTop = 0; hero.offsetHeight = 3000;
   const video = nodes.get('.hero-video');
   video.readyState = 0; video.duration = 10; video.seeking = false; video.pause = () => {};
@@ -88,7 +136,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   const formData = { name: 'Guest Example', email: 'visitor@example.test', interest: 'Purchasing a residence', message: 'I would like a consultation.' };
   let clipboard = '';
   runInNewContext(source, {
-    window, document, history: { replaceState() {} },
+    window, document, gsap, ScrollTrigger, history: { replaceState() {} },
     navigator: { clipboard: { writeText: async text => { clipboard = text; } } },
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame: id => frames.delete(id),
@@ -106,7 +154,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     const pending = [...videoFrames.values()]; videoFrames.clear();
     pending.forEach(callback => callback(clock, { mediaTime }));
   };
-  return { nodes, filters, cards, projects, window, document, video, videoSource, observers, frames, videoFrames, timers, flush, advance, presentFrame, clipboard: () => clipboard };
+  return { nodes, filters, cards, projects, materials, materialAccordion, marquee, marqueeTrack, marqueeToggle, paragraph, motionCalls, mediaRegistrations, pins, window, document, video, videoSource, observers, frames, videoFrames, timers, flush, advance, presentFrame, sequenceCallbacks, sequenceCalls, clipboard: () => clipboard };
 }
 
 async function startScrub(p, scroll = 400) {
@@ -121,6 +169,44 @@ async function settleScrub(p, cycles = 250) {
     p.presentFrame(); p.flush();
   }
 }
+
+test('canvas is primary, copy follows painted frames and the poster cannot cover reverse catch-up', async () => {
+  const p = pageFixture({ sequenceLibrary: true });
+  assert.equal(p.sequenceCalls.at(-1).active, false);
+  p.window.scrollY = 1800; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.sequenceCalls.at(-1).active, true);
+  assert.equal(p.video.loads, 0, 'Do not download the MP4 alongside image frames');
+  assert.equal(p.video.seeks.length, 0);
+  assert.equal(p.nodes.get('.hero-copy').style.opacity, '1', 'Keep copy at the opening until the first frame is painted');
+  p.sequenceCallbacks.onDraw(.8, 234);
+  assert.equal(p.nodes.get('.hero-copy').style.opacity, '0');
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0');
+  p.window.scrollY = 0; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.sequenceCalls.at(-1).active, true, 'Continue reverse drawing even after the scroll stops at the top');
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0');
+  p.sequenceCallbacks.onDraw(.01, 3);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0', 'Wait for actual frame zero');
+  p.sequenceCallbacks.onDraw(0, 0);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+  assert.equal(p.nodes.get('.hero-copy').style.opacity, '1');
+  p.window.scrollY = 5000; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.sequenceCalls.at(-1).active, false);
+});
+
+test('canvas failure enables the preserved MP4, and direct jumps/reduced motion remain lazy', async () => {
+  const p = pageFixture({ sequenceLibrary: true });
+  p.window.scrollY = 400; await p.window.emit('scroll'); p.flush();
+  p.sequenceCallbacks.onError(new Error('Frame failed')); p.flush();
+  assert.equal(p.video.loads, 1);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+  await startScrub(p); await settleScrub(p);
+  assert.ok(p.video.seeks.length > 0);
+  for (const options of [{ initialScroll: 5000 }, { reducedMotion: true }]) {
+    const quiet = pageFixture({ ...options, sequenceLibrary: true });
+    assert.ok(quiet.sequenceCalls.every(call => !call.active));
+    assert.equal(quiet.video.loads, 0);
+  }
+});
 
 test('CDN failures preserve project filtering and the architectural fallback', async () => {
   const p = pageFixture();
@@ -422,5 +508,78 @@ test('a stylesheet failure still enables the page interactions safely', async ()
   await p.nodes.get('[data-deferred-styles]').emit('error');
   await p.nodes.get('[data-menu-toggle]').emit('click');
   assert.equal(p.nodes.get('[data-mobile-menu]').inert, false);
+  assert.equal(p.video.loads, 0);
+});
+
+test('material chapters support click, touch and wrapping keyboard navigation without GSAP', async () => {
+  const p = pageFixture();
+  const expanded = () => p.materials.map(({ button }) => button.getAttribute('aria-expanded'));
+  assert.deepEqual(expanded(), ['true', 'false', 'false']);
+  await p.materials[2].button.emit('click');
+  assert.deepEqual(expanded(), ['false', 'false', 'true']);
+  assert.deepEqual(p.materials.map(({ detail }) => detail.hidden), [true, true, false]);
+  await p.materials[2].button.emit('keydown', { key: 'ArrowRight' });
+  assert.deepEqual(expanded(), ['true', 'false', 'false']);
+  assert.equal(p.document.activeElement, p.materials[0].button);
+  await p.materials[1].panel.emit('pointerenter', { pointerType: 'mouse' });
+  assert.equal(expanded()[0], 'true', 'Hover cannot collapse a keyboard-focused chapter');
+  await p.materials[0].button.emit('keydown', { key: 'End' });
+  assert.equal(expanded()[2], 'true');
+  await p.materials[0].panel.emit('pointerenter', { pointerType: 'touch' });
+  assert.equal(expanded()[2], 'true', 'Touch uses explicit selection, not incidental hover');
+  await p.materials[2].button.emit('keydown', { key: 'Home' });
+  assert.equal(expanded()[0], 'true');
+  assert.equal(p.marqueeToggle.hidden, true, 'No pause control for a static CDN fallback');
+});
+
+test('editorial motion scrubs words and pauses the marquee offscreen, hidden or by choice', async () => {
+  const p = pageFixture({ motionLibrary: true });
+  const reveal = p.motionCalls.find(call => call.from);
+  assert.equal(reveal.from.opacity, .1);
+  assert.equal(reveal.config.scrollTrigger.scrub, .5);
+  assert.equal(p.paragraph.children.filter(child => child.textContent !== ' ').length, 7);
+  const marquee = p.motionCalls.find(call => call.target === p.marqueeTrack);
+  assert.equal(marquee.config.xPercent, -50);
+  assert.equal(marquee.instance.paused, true);
+  const observer = p.observers.find(observer => observer.options.rootMargin === '100px');
+  observer.trigger(p.marquee); assert.equal(marquee.instance.paused, false);
+  await p.marqueeToggle.emit('click'); assert.equal(marquee.instance.paused, true);
+  assert.equal(p.marqueeToggle.getAttribute('aria-pressed'), 'true');
+  observer.trigger(p.marquee, false); observer.trigger(p.marquee);
+  assert.equal(marquee.instance.paused, true, 'Returning onscreen must respect the user pause');
+  await p.marqueeToggle.emit('click'); assert.equal(marquee.instance.paused, false);
+  p.document.hidden = true; await p.document.emit('visibilitychange');
+  assert.equal(marquee.instance.paused, true);
+  const registration = p.mediaRegistrations.find(entry => entry.query === '(prefers-reduced-motion: no-preference)');
+  registration.cleanup();
+  assert.equal(observer.disconnected, true);
+  assert.equal(p.marqueeToggle.hidden, true);
+  assert.equal(p.marqueeToggle.listeners.click.length, 0);
+  assert.equal(p.paragraph.textContent, 'The light. The proportions. The quiet details.');
+});
+
+test('chapter pinning is limited to fitting, tall desktop layouts and reduced motion stays static', () => {
+  const desktop = pageFixture({ motionLibrary: true });
+  assert.equal(desktop.pins.length, 1);
+  assert.equal(desktop.pins[0].pinSpacing, false);
+  assert.equal(desktop.pins[0].invalidateOnRefresh, true);
+  assert.equal(desktop.pins[0].end(), '+=450');
+  desktop.mediaRegistrations.find(entry => entry.query.includes('min-width')).cleanup();
+  assert.equal(desktop.nodes.get('.approach').classList.contains('motion-pinned'), false);
+  for (const options of [{ width: 390 }, { height: 768 }, { pinnedHeight: 900 }, { reducedMotion: true }]) {
+    const p = pageFixture({ motionLibrary: true, ...options });
+    assert.equal(p.pins.length, 0);
+    if (options.reducedMotion) {
+      assert.equal(p.motionCalls.length, 0);
+      assert.equal(p.marqueeToggle.hidden, true);
+    }
+  }
+});
+
+test('a single filtered development occupies the whole grid without reloading hero media', async () => {
+  const p = pageFixture(); await p.filters[2].emit('click');
+  assert.equal(p.nodes.get('.project-list').dataset.visibleCount, '1');
+  await p.filters[0].emit('click');
+  assert.equal(p.nodes.get('.project-list').dataset.visibleCount, '3');
   assert.equal(p.video.loads, 0);
 });

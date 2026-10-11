@@ -38,6 +38,24 @@ test('video seeking returns exactly the requested bytes, including suffix ranges
   }
 });
 
+test('canvas renderer and first/last frame variants are served with correct content types', async () => {
+  const js = await fetch(`${address}/hero-sequence.js`);
+  assert.equal(js.status, 200);
+  assert.match(js.headers.get('content-type'), /javascript/);
+  for (const variant of ['desktop', 'mobile']) {
+    for (const index of ['000', '293']) {
+      const response = await fetch(`${address}/assets/hero-frames/${variant}/frame-${index}.webp`);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('content-type'), 'image/webp');
+      const data = Buffer.from(await response.arrayBuffer());
+      assert.equal(data.toString('ascii', 8, 12), 'WEBP');
+    }
+  }
+  const html = await (await fetch(address)).text();
+  assert.match(html, /<canvas class="hero-canvas" hidden aria-hidden="true"><\/canvas>/);
+  assert.ok(html.indexOf('defer src="./hero-sequence.js"') < html.indexOf('defer src="./script.js"'));
+});
+
 test('invalid and multi-part ranges are rejected, rather than downloading the full video', async () => {
   for (const range of ['bytes=999999999-', 'bytes=10-5', 'bytes=0-1,5-6', 'bytes=-0']) {
     const response = await fetch(`${address}/assets/nova-construction-scrub.mp4`, { headers: { Range: range } });
@@ -133,7 +151,7 @@ test('local font definitions point to real, correctly served WOFF2 files', async
     assert.equal(bytes.toString('ascii', 0, 4), 'wOF2');
     assert.ok(bytes.length > 10000 && bytes.length < 50000);
   }
-  for (const family of ['CormorantGaramond', 'Manrope']) {
+  for (const family of ['CormorantGaramond', 'Outfit']) {
     const license = await readFile(resolve(root, `assets/fonts/${family}-OFL.txt`), 'utf8');
     assert.match(license, /SIL OPEN FONT LICENSE/);
   }

@@ -1,0 +1,22 @@
+{
+  "source": "nova-construction.mp4",
+  "frameCount": 294,
+  "fps": 24,
+  "variants": [
+    {
+      "name": "desktop",
+      "width": 1344,
+      "height": 768,
+      "quality": 90,
+      "bytes": 78321562
+    },
+    {
+      "name": "mobile",
+      "width": 960,
+      "height": 548,
+      "quality": 90,
+      "bytes": 46792728
+    }
+  ],
+  "note": "All source frames, lossy WebP quality 90. Original MP4s preserved."
+}

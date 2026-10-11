@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
 const globals = new Set([':root', '*', '*::before', '*::after', 'html', 'body', 'body.menu-open', 'body.dialog-open', 'main', 'section[id]', 'a', 'button', 'input', 'textarea', 'select', 'img', 'video', 'button[hidden]', '[hidden]', '::selection', ':focus-visible']);
-const firstScreenClass = /\.(?:site-header|brand|header-cta|menu-toggle|mobile-menu|skip-link|grain|progress|hero(?:-[\w-]+)?|eyebrow|status-dot|button(?:-primary)?|text-link|timeline-track|section-kicker)(?![\w-])/;
+const firstScreenClass = /\.(?:site-header|brand|header-cta|menu-toggle|mobile-menu|skip-link|grain|progress|hero(?:-[\w-]+)?|eyebrow|status-dot|button(?:-[\w-]+)?|text-link|timeline-track|section-kicker)(?![\w-])/;
 
 // Small, strict parser for this repository's rule/@media/@font-face stylesheet.
 // Quotes and escaped characters are respected (including the SVG data URL).

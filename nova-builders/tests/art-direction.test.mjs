@@ -25,8 +25,9 @@ test('project-first layout has one featured development, useful facts and honest
   assert.match(html, /All projects, specifications and timelines are portfolio concepts/);
   assert.doesNotMatch(html, /Since 2008|Years of thoughtful development|4\.2M/);
   assert.doesNotMatch(html, /<a class="hero-feature"|<a class="hero-scroll"/);
-  assert.match(html, /03 \/ Planning/);
-  assert.match(html, /04 \/ Design development/);
+  assert.match(html, /The discipline behind the design/);
+  assert.match(html, /The design studio/);
+  assert.doesNotMatch(html, /class="section-kicker">\d+ \/ /);
 });
 
 test('new image families have responsive WebP variants and below-fold images remain lazy', async () => {

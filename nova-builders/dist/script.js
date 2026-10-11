@@ -76,8 +76,8 @@
     });
   });
 
-  // Scroll chooses a destination; a separate, bounded catch-up loop moves the
-  // paused video toward it. A completed seek isn't necessarily a painted frame.
+  // Canvas is primary when supported. The preserved MP4 seek controller below
+  // is a fallback; a completed seek isn't necessarily a painted frame.
   const hero = document.querySelector('[data-hero]');
   const heroPoster = document.querySelector('.hero-poster');
   const heroCopy = document.querySelector('.hero-copy');
@@ -103,12 +103,28 @@
   let heroProgress = 0;
   let displayedVideoFrame = 0;
   let posterOpacity = 1;
+  let heroSequence = null;
+  let sequenceStarted = false;
+  let sequenceReady = false;
+  let sequenceFrame = -1;
+  let displayedHeroProgress = 0;
   const clamp = value => Math.max(0, Math.min(1, value));
+  const paintHeroCopy = p => {
+    buildProgress.style.transform = `scaleX(${p})`;
+    buildPhase.textContent = p < .2 ? 'The vision' : p < .65 ? 'Taking shape' : p < .94 ? 'Every detail' : 'A new landmark';
+    if (reducedMotion) return;
+    const copyOpacity = 1 - clamp((p - .12) / .38);
+    heroCopy.style.opacity = String(copyOpacity);
+    heroCopy.style.transform = `translateY(${-p * 36}px)`;
+    heroCopy.inert = copyOpacity < .05;
+  };
   const syncHeroPoster = () => {
-    if (!videoReady || reducedMotion) posterOpacity = 1;
+    if (!(heroSequence ? sequenceReady : videoReady) || reducedMotion) posterOpacity = 1;
     else {
-      const requestedOpacity = 1 - clamp((heroProgress - .035) / .13);
-      const rewindComplete = targetVideoTime < frameDuration * .5 && displayedVideoFrame === 0 && !video.seeking && !awaitingFrame;
+      const requestedOpacity = 1 - clamp(((heroSequence ? displayedHeroProgress : heroProgress) - .035) / .13);
+      const rewindComplete = heroSequence
+        ? heroProgress <= .035 && sequenceFrame === 0
+        : targetVideoTime < frameDuration * .5 && displayedVideoFrame === 0 && !video.seeking && !awaitingFrame;
       // Scroll can reach the top before reverse decoding catches up. Keep the
       // video uncovered until the opening frame has actually completed its seek.
       // Preserve the initial forward fade and the cover on load/error.
@@ -132,6 +148,7 @@
     clearFrameWait();
   };
   const requestVideoUpdate = () => {
+    if (heroSequence) return;
     if (!scrubFrame && heroActive && !document.hidden && videoReady && videoDuration && !reducedMotion && !awaitingFrame && !video.seeking) {
       scrubFrame = requestAnimationFrame(updateVideoScrub);
     }
@@ -205,7 +222,7 @@
     } else requestVideoUpdate();
   }
   const requestHeroVideo = () => {
-    if (videoRequested || reducedMotion) return;
+    if (heroSequence || videoRequested || reducedMotion) return;
     const source = video.querySelector('source[data-src]');
     if (!source || !source.dataset.src) return;
     videoRequested = true;
@@ -226,16 +243,16 @@
     heroProgress = p;
     progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
     header.classList.toggle('scrolled', y > 80);
-    buildProgress.style.transform = `scaleX(${p})`;
-    buildPhase.textContent = p < .2 ? '01 / The vision' : p < .65 ? '02 / Taking shape' : p < .94 ? '03 / Every detail' : '04 / A new landmark';
+    if (!heroSequence) paintHeroCopy(p);
+    else if (!sequenceReady) paintHeroCopy(0);
     if (!reducedMotion) {
       // No media URL is attached until the visitor scrolls inside the hero.
       // Jumping directly to another section must not start a 29 MB download.
-      if (p > 0 && y < heroTop + heroHeight) requestHeroVideo();
-      const copyOpacity = 1 - clamp((p - .12) / .38);
-      heroCopy.style.opacity = String(copyOpacity);
-      heroCopy.style.transform = `translateY(${-p * 36}px)`;
-      heroCopy.inert = copyOpacity < .05;
+      if (p > 0 && heroActive) {
+        sequenceStarted = true;
+        requestHeroVideo();
+      }
+      if (heroSequence) heroSequence.setProgress(clamp((p - .035) / .965), sequenceStarted && heroActive);
       if (videoDuration) {
         const videoProgress = clamp((p - .035) / .965);
         const lastFrameTime = Math.floor((videoDuration - .05) / frameDuration) * frameDuration;
@@ -277,12 +294,74 @@
   video.addEventListener('canplay', requestVideoUpdate);
   video.addEventListener('error', () => { videoReady = false; stopVideoScrub(); requestScrollUpdate(); });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopVideoScrub();
+    if (document.hidden) {
+      stopVideoScrub();
+      if (heroSequence) heroSequence.setProgress(clamp((heroProgress - .035) / .965), false);
+    }
     else requestScrollUpdate();
   });
   window.addEventListener('scroll', requestScrollUpdate, { passive: true });
-  window.addEventListener('resize', requestScrollUpdate, { passive: true });
+  window.addEventListener('resize', () => {
+    if (heroSequence) heroSequence.resize();
+    requestScrollUpdate();
+  }, { passive: true });
+  if (!reducedMotion && typeof window.NovaHeroSequence === 'function') {
+    try {
+      heroSequence = window.NovaHeroSequence({
+        canvas: document.querySelector('.hero-canvas'),
+        onDraw: (p, frame) => {
+          sequenceReady = true;
+          sequenceFrame = frame;
+          displayedHeroProgress = frame === 0 ? 0 : .035 + p * .965;
+          paintHeroCopy(displayedHeroProgress);
+          syncHeroPoster();
+        },
+        onError: () => {
+          heroSequence = null;
+          sequenceReady = false;
+          requestHeroVideo();
+          requestScrollUpdate();
+        }
+      });
+    } catch { heroSequence = null; }
+  }
   updateScroll();
+
+  // Material chapters work independently of the animation CDN. A single open
+  // panel, native buttons and arrow navigation support touch and keyboard use.
+  const materialAccordion = document.querySelector('[data-material-accordion]');
+  if (materialAccordion) {
+    const panels = [...materialAccordion.querySelectorAll('[data-material-panel]')];
+    const buttons = panels.map(panel => panel.querySelector('[data-material-toggle]'));
+    const activateMaterial = index => {
+      panels.forEach((panel, i) => {
+        panel.classList.toggle('is-active', i === index);
+        buttons[i].setAttribute('aria-expanded', String(i === index));
+        panel.querySelector('[data-material-detail]').hidden = i !== index;
+      });
+    };
+    materialAccordion.classList.add('is-interactive');
+    activateMaterial(0);
+    buttons.forEach((button, index) => {
+      button.addEventListener('click', () => activateMaterial(index));
+      button.addEventListener('focus', () => activateMaterial(index));
+      panels[index].addEventListener('pointerenter', event => {
+        // Hover must not collapse another panel while its button has focus.
+        const focusInside = materialAccordion.contains(document.activeElement);
+        if (event.pointerType === 'mouse' && !focusInside && window.matchMedia('(hover: hover)').matches) activateMaterial(index);
+      });
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + buttons.length) % buttons.length;
+        activateMaterial(next);
+        buttons[next].focus({ preventScroll: true });
+      });
+    });
+  }
+
+  const marqueeToggle = document.querySelector('[data-marquee-toggle]');
+  if (marqueeToggle) marqueeToggle.hidden = true;
 
   if (window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
@@ -315,6 +394,70 @@
         } });
       });
     }
+    if (typeof gsap.matchMedia === 'function') {
+      const chapterMotion = gsap.matchMedia();
+      chapterMotion.add('(prefers-reduced-motion: no-preference)', () => {
+        const originalParagraphs = [];
+        document.querySelectorAll('[data-word-reveal]').forEach(paragraph => {
+          const original = paragraph.textContent;
+          const words = original.trim().split(/\s+/).map(word => {
+            const span = document.createElement('span');
+            span.textContent = word;
+            return span;
+          });
+          paragraph.replaceChildren(...words.flatMap(word => [word, document.createTextNode(' ')]));
+          originalParagraphs.push([paragraph, original]);
+          gsap.fromTo(words, { opacity: .1 }, { opacity: 1, stagger: .08, ease: 'none', scrollTrigger: { trigger: paragraph, start: 'top 85%', end: 'bottom 45%', scrub: .5 } });
+        });
+
+        const marquee = document.querySelector('[data-principles-marquee]');
+        let cleanupMarquee = () => {};
+        if (marquee && marqueeToggle) {
+          const track = marquee.querySelector('.marquee-track');
+          const tween = gsap.to(track, { xPercent: -50, duration: 36, repeat: -1, ease: 'none', paused: true });
+          let nearby = false;
+          let userPaused = false;
+          const syncMarquee = () => { nearby && !document.hidden && !userPaused ? tween.play() : tween.pause(); };
+          const toggleMarquee = () => {
+            userPaused = !userPaused;
+            marqueeToggle.setAttribute('aria-pressed', String(userPaused));
+            marqueeToggle.setAttribute('aria-label', userPaused ? 'Resume moving design principles' : 'Pause moving design principles');
+            marqueeToggle.textContent = userPaused ? 'Resume ↻' : 'Pause Ⅱ';
+            syncMarquee();
+          };
+          marqueeToggle.hidden = false;
+          marqueeToggle.setAttribute('aria-pressed', 'false');
+          marqueeToggle.setAttribute('aria-label', 'Pause moving design principles');
+          marqueeToggle.textContent = 'Pause Ⅱ';
+          const observer = new IntersectionObserver(entries => { nearby = entries.some(entry => entry.isIntersecting); syncMarquee(); }, { rootMargin: '100px' });
+          observer.observe(marquee);
+          marqueeToggle.addEventListener('click', toggleMarquee);
+          document.addEventListener('visibilitychange', syncMarquee);
+          cleanupMarquee = () => {
+            observer.disconnect();
+            marqueeToggle.removeEventListener('click', toggleMarquee);
+            document.removeEventListener('visibilitychange', syncMarquee);
+            marqueeToggle.hidden = true;
+          };
+        }
+        return () => {
+          cleanupMarquee();
+          originalParagraphs.forEach(([paragraph, original]) => { paragraph.textContent = original; });
+        };
+      });
+
+      // The blueprint and copy must fit the viewport before pinning. Phones,
+      // shorter screens and reduced-motion visitors retain the normal flow.
+      chapterMotion.add('(min-width: 1101px) and (min-height: 900px) and (prefers-reduced-motion: no-preference)', () => {
+        const chapter = document.querySelector('.approach');
+        const pinned = document.querySelector('.approach-sticky');
+        const steps = document.querySelector('.approach-steps');
+        if (!chapter || !pinned || !steps || pinned.offsetHeight > window.innerHeight - 160 || steps.offsetHeight <= pinned.offsetHeight) return;
+        chapter.classList.add('motion-pinned');
+        ScrollTrigger.create({ trigger: steps, start: 'top top+=110', end: () => `+=${Math.max(0, steps.offsetHeight - pinned.offsetHeight)}`, pin: pinned, pinSpacing: false, invalidateOnRefresh: true });
+        return () => chapter.classList.remove('motion-pinned');
+      });
+    }
     document.fonts.ready.then(() => ScrollTrigger.refresh());
     window.addEventListener('load', () => ScrollTrigger.refresh(), { once: true });
   }
@@ -345,6 +488,7 @@
     document.querySelector('.project-list').classList.toggle('filtered', category !== 'all');
     cards.forEach(card => { card.hidden = category !== 'all' && card.dataset.category !== category; });
     const count = cards.filter(card => !card.hidden).length;
+    document.querySelector('.project-list').dataset.visibleCount = String(count);
     document.querySelector('[data-project-count]').textContent = `${String(count).padStart(2, '0')} ${count === 1 ? 'development' : 'developments'}`;
     // Filtering must not leave cards in the hidden initial state of a reveal.
     if (window.gsap) {
