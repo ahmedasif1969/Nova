@@ -8,7 +8,10 @@
     const mobile = window.matchMedia('(max-width: 900px)').matches;
     const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
     const capacity = lowMemory ? 8 : mobile ? 10 : 12;
-    const variant = mobile ? 'mobile' : 'desktop';
+    // Share original-resolution frames across devices. The smaller archive
+    // softens fine building details on high-density phone displays.
+    const variant = 'desktop';
+    const maxCanvasPixels = lowMemory ? 2000000 : 4000000;
     const lastFrame = 293;
     const cache = new Map();
     const pending = new Map();
@@ -49,13 +52,16 @@
     function sizeCanvas() {
       const cssWidth = canvas.clientWidth || window.innerWidth;
       const cssHeight = canvas.clientHeight || window.innerHeight;
-      // Cap the backing store as well as the cache on high-DPI/4K screens.
-      const ratio = Math.min(window.devicePixelRatio || 1, 1.25,
-        Math.sqrt(2000000 / Math.max(1, cssWidth * cssHeight)));
-      const nextWidth = Math.max(1, Math.round(cssWidth * ratio));
-      const nextHeight = Math.max(1, Math.round(cssHeight * ratio));
+      // Preserve phone display density without unbounded high-DPI/4K buffers.
+      const ratio = Math.min(window.devicePixelRatio || 1, 3,
+        Math.sqrt(maxCanvasPixels / Math.max(1, cssWidth * cssHeight)));
+      const nextWidth = Math.max(1, Math.floor(cssWidth * ratio));
+      const nextHeight = Math.max(1, Math.floor(cssHeight * ratio));
       width = canvas.width = nextWidth;
       height = canvas.height = nextHeight;
+      // Resizing resets context state. Request quality resampling each time.
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
     }
     const resize = () => {
       // Defer clearing the canvas until a bitmap can replace its pixels. This
@@ -136,7 +142,9 @@
     }
     const api = {
       setProgress(progress, enabled) {
-        const next = bounded(progress * lastFrame);
+        // Target a real frame, so easing cannot stall just below a half-frame
+        // rounding boundary while repeatedly scheduling identical drawings.
+        const next = Math.round(bounded(progress * lastFrame));
         if (Math.abs(next - target) > .001) direction = next > target ? 1 : -1;
         target = next;
         if (!enabled || document.hidden) {

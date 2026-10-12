@@ -128,6 +128,7 @@ button[hidden], [hidden] { display: none !important; }
 .text-link { display: inline-flex; justify-content: space-between; align-items: center; gap: 2rem; padding: .6rem 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; font-size: .72rem; font-weight: 500; line-height: 1.5; }
 .text-link span { transition: transform .25s; }
 .text-link:hover span { transform: translate(3px,-3px); }
+.text-link:focus-visible span { transform: translate(3px,-3px); }
 .hero-feature { border-left: 1px solid var(--white-line); padding: .25rem 0 .25rem 1.8rem; min-width: 218px; }
 .hero-feature > span { display: block; font-size: .55rem; text-transform: uppercase; letter-spacing: .15em; opacity: .6; }
 .hero-feature strong { display: block; margin-top: .8rem; font: 400 2.15rem/1.1 var(--display); }
@@ -160,6 +161,10 @@ h2 i { font-weight: 400; color: var(--bronze); }
 .philosophy-intro > p { max-width: 250px; font-size: 1rem; line-height: 1.8; margin: 0 0 2rem; color: #62675f; }
 .statement-copy p.philosophy-reveal { font: 400 clamp(1.9rem,2.8vw,3.2rem)/1.3 var(--display); letter-spacing: -.025em; margin-bottom: 2rem; }
 .statement-copy p.secondary-copy { font-size: .98rem; line-height: 1.9; max-width: 560px; }
+[data-word-reveal] { --reveal-muted: #7d8177; }
+[data-reveal-tone="dark"] { --reveal-muted: #7e877a; }
+.reveal-word { position: relative; display: inline-block; white-space: nowrap; color: var(--reveal-muted); }
+.reveal-word-ink { position: absolute; inset: 0; color: var(--word-ink); opacity: 1; pointer-events: none; user-select: none; }
 .metrics { display: grid; grid-template-columns: repeat(4,1fr); margin-top: 5rem; border-top: 1px solid var(--line); }
 .metrics article { padding: 2.2rem 1.5rem 0; border-right: 1px solid var(--line); }
 .metrics article:first-child { padding-left: 0; }
@@ -177,7 +182,8 @@ h2 i { font-weight: 400; color: var(--bronze); }
 .project-filters { display: flex; gap: 1.5rem; }
 .project-filters button { position: relative; padding: .5rem 0; border: 0; background: transparent; font-size: .76rem; min-height: 44px; color: #b6beaf; transition: color .25s; }
 .project-filters button.active, .project-filters button:hover { color: var(--paper); }
-.project-filters button.active::after { content: ""; position: absolute; bottom: -.85rem; left: 0; right: 0; height: 2px; background: var(--sand); }
+.project-filters button::after { content: ""; position: absolute; bottom: -.85rem; left: 0; right: 0; height: 2px; background: var(--sand); transform: scaleX(0); transform-origin: left; transition: transform .3s cubic-bezier(.16,1,.3,1); }
+.project-filters button.active::after { transform: scaleX(1); }
 .project-count { color: #b6beaf; font-size: .58rem; letter-spacing: .08em; }
 .project-list { display: grid; grid-auto-flow: dense; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; align-items: stretch; border-top: 1px solid var(--white-line); border-left: 1px solid var(--white-line); }
 .project-card { min-width: 0; padding: 1.5rem; border-right: 1px solid var(--white-line); border-bottom: 1px solid var(--white-line); }
@@ -507,6 +513,21 @@ footer { padding: 4rem var(--pad) 1.8rem; background: var(--paper); }
   .hero-poster { opacity: 1 !important; }
   .hero-timeline { display: none; }
   .reveal-section { opacity: 1 !important; transform: none !important; }
+  .reveal-word { color: var(--word-ink) !important; }
+  .reveal-word-ink { opacity: 1 !important; }
+  [data-ui-reveal] { opacity: 1 !important; transform: none !important; }
+  .section-reveal-item { opacity: 1 !important; transform: none !important; }
+  .button:hover, .button:active, .button span, .text-link span { transform: none !important; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .button span { transition: transform .3s cubic-bezier(.16,1,.3,1); }
+  .button:focus-visible span { transform: translate(3px,-3px); }
+  .button:active { transform: translateY(0) scale(.985); }
+  .project-image:focus-visible .project-action { transform: rotate(45deg); background: var(--sand); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .button:hover span { transform: translate(3px,-3px); }
+  .project-filters button:not(.active):hover::after, .project-filters button:not(.active):focus-visible::after { transform: scaleX(.6); }
 }
 .living { background: var(--paper); }
 .living-heading { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10%; align-items: end; margin-bottom: 4rem; }

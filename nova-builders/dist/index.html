@@ -119,6 +119,7 @@ button[hidden], [hidden] { display: none !important; }
 .text-link { display: inline-flex; justify-content: space-between; align-items: center; gap: 2rem; padding: .6rem 0; border: 0; border-bottom: 1px solid currentColor; background: transparent; font-size: .72rem; font-weight: 500; line-height: 1.5; }
 .text-link span { transition: transform .25s; }
 .text-link:hover span { transform: translate(3px,-3px); }
+.text-link:focus-visible span { transform: translate(3px,-3px); }
 .hero-feature { border-left: 1px solid var(--white-line); padding: .25rem 0 .25rem 1.8rem; min-width: 218px; }
 .hero-feature > span { display: block; font-size: .55rem; text-transform: uppercase; letter-spacing: .15em; opacity: .6; }
 .hero-feature strong { display: block; margin-top: .8rem; font: 400 2.15rem/1.1 var(--display); }
@@ -203,7 +204,12 @@ button[hidden], [hidden] { display: none !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 .hero { height: 100vh; height: 100svh; }
 .hero-poster { opacity: 1 !important; }
-.hero-timeline { display: none; } }
+.hero-timeline { display: none; }
+.button:hover, .button:active, .button span, .text-link span { transform: none !important; } }
+@media (prefers-reduced-motion: no-preference) { .button span { transition: transform .3s cubic-bezier(.16,1,.3,1); }
+.button:focus-visible span { transform: translate(3px,-3px); }
+.button:active { transform: translateY(0) scale(.985); } }
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) { .button:hover span { transform: translate(3px,-3px); } }
 @media (max-width: 900px) { .hero-edition { top: 100px; } }
 @media (max-width: 640px) { .hero-edition { display: none; }
 .hero-intro > p { font-size: .88rem; }
@@ -275,13 +281,13 @@ button[hidden], [hidden] { display: none !important; }
     </section>
 
     <section class="projects section-pad" id="projects">
-      <div class="section-heading reveal-section">
-        <div><p class="section-kicker">The collection</p><h2>Places with a point of view.</h2></div>
-        <p class="portfolio-disclaimer">Three imagined developments. Different settings, one architectural standard. All projects, specifications and timelines are portfolio concepts.</p>
+      <div class="section-heading" data-section-reveal>
+        <div><p class="section-kicker">The collection</p><h2 data-word-reveal data-reveal-tone="dark">Places with a point of view.</h2></div>
+        <p class="portfolio-disclaimer reveal-section">Three imagined developments. Different settings, one architectural standard. All projects, specifications and timelines are portfolio concepts.</p>
       </div>
-      <div class="project-toolbar"><div class="project-filters" role="group" aria-label="Filter developments"><button class="active" type="button" data-filter="all" aria-pressed="true">All developments</button><button type="button" data-filter="residential" aria-pressed="false">Residential</button><button type="button" data-filter="mixed" aria-pressed="false">Mixed-use</button></div><span class="project-count" data-project-count aria-live="polite">03 developments</span></div>
+      <div class="project-toolbar" data-ui-reveal><div class="project-filters" role="group" aria-label="Filter developments"><button class="active" type="button" data-filter="all" aria-pressed="true">All developments</button><button type="button" data-filter="residential" aria-pressed="false">Residential</button><button type="button" data-filter="mixed" aria-pressed="false">Mixed-use</button></div><span class="project-count" data-project-count aria-live="polite">03 developments</span></div>
       <div class="project-list">
-        <article class="project-card featured-project reveal-section" data-category="residential">
+        <article class="project-card featured-project reveal-section" data-category="residential" data-section-reveal>
           <button class="project-image" type="button" data-project="aurelian" aria-label="Explore The Aurelian">
             <img src="./assets/aurelian-daylight-detail-1536.webp" srcset="./assets/aurelian-daylight-detail-640.webp 640w, ./assets/aurelian-daylight-detail-960.webp 960w, ./assets/aurelian-daylight-detail-1536.webp 1536w" sizes="100vw" alt="The Aurelian residential tower with planted terraces in natural daylight" loading="lazy" decoding="async" width="1536" height="1024" />
             <span class="project-status">Under construction</span>
@@ -291,7 +297,7 @@ button[hidden], [hidden] { display: none !important; }
           <p class="project-description">A terraced residential tower shaped around natural light, private outdoor space and a landscaped arrival.</p>
           <dl class="project-facts"><div><dt>Scale</dt><dd>28 levels</dd></div><div><dt>Design</dt><dd>Planted sky terraces</dd></div><div><dt>Amenities</dt><dd>Lounge &amp; wellness studio</dd></div></dl>
         </article>
-        <article class="project-card reveal-section" data-category="residential">
+        <article class="project-card reveal-section" data-category="residential" data-section-reveal>
           <button class="project-image" type="button" data-project="vela" aria-label="Explore Vela Residences">
             <img src="./assets/vela-detail-1536.webp" srcset="./assets/vela-detail-640.webp 640w, ./assets/vela-detail-960.webp 960w, ./assets/vela-detail-1536.webp 1536w" sizes="(max-width: 640px) 100vw, 50vw" alt="Vela Residences waterfront apartments at dawn" loading="lazy" decoding="async" width="1536" height="1024" />
             <span class="project-status">In development</span>
@@ -301,7 +307,7 @@ button[hidden], [hidden] { display: none !important; }
           <p class="project-description">Waterfront apartments with shaded balconies, shared gardens and direct access to the promenade.</p>
           <dl class="project-facts"><div><dt>Collection</dt><dd>142 residences</dd></div><div><dt>Amenities</dt><dd>Residents’ club &amp; pool</dd></div></dl>
         </article>
-        <article class="project-card reveal-section" data-category="mixed">
+        <article class="project-card reveal-section" data-category="mixed" data-section-reveal>
           <button class="project-image" type="button" data-project="meridian" aria-label="Explore Meridian One">
             <img src="./assets/meridian-detail-1536.webp" srcset="./assets/meridian-detail-640.webp 640w, ./assets/meridian-detail-960.webp 960w, ./assets/meridian-detail-1536.webp 1536w" sizes="(max-width: 640px) 100vw, 50vw" alt="Meridian One mixed-use tower at dusk" loading="lazy" decoding="async" width="1536" height="1024" />
             <span class="project-status">Launching soon</span>
@@ -312,20 +318,20 @@ button[hidden], [hidden] { display: none !important; }
           <dl class="project-facts"><div><dt>Scale</dt><dd>41 storeys</dd></div><div><dt>Programme</dt><dd>Homes, work &amp; retail</dd></div></dl>
         </article>
       </div>
-      <div class="collection-note"><span>Find the project that fits your plans.</span><a class="text-link" href="#consultation">Discuss a project <span aria-hidden="true">↗</span></a></div>
+      <div class="collection-note" data-ui-reveal><span>Find the project that fits your plans.</span><a class="text-link" href="#consultation">Discuss a project <span aria-hidden="true">↗</span></a></div>
     </section>
 
     <section class="statement section-pad" id="legacy">
       <div class="section-topline"><p class="section-kicker">The Nova philosophy</p><span>A fictional brand study</span></div>
-      <h2 class="philosophy-heading reveal-section">Designed for life.<br/>Built to belong.</h2>
-      <div class="statement-grid">
+      <h2 class="philosophy-heading reveal-section" data-section-reveal="single">Designed for life.<br/>Built to belong.</h2>
+      <div class="statement-grid" data-section-reveal>
         <div class="philosophy-intro reveal-section"><span class="philosophy-brand">Nova <small>Builders &amp; Developers</small></span><p>Architecture, development and delivery, considered as one.</p><a class="text-link dark" href="#approach">Explore our process <span aria-hidden="true">↗</span></a></div>
-        <div class="statement-copy reveal-section">
+        <div class="statement-copy">
           <p class="philosophy-reveal" data-word-reveal>A place should feel right long before you can explain why. The light. The proportions. The quiet details. That is where we begin.</p>
           <p class="secondary-copy">Our approach begins with the site and the people who will use it. Daylight, privacy, generous shared spaces and durable materials guide every decision—from the first plan to the details at handover.</p>
         </div>
       </div>
-      <div class="metrics">
+      <div class="metrics" data-ui-reveal>
         <article><strong data-count="3">3</strong><span>Imagined developments</span></article>
         <article><strong data-count="2">2</strong><span>Residential concepts</span></article>
         <article><strong data-count="1">1</strong><span>Mixed-use concept</span></article>
@@ -340,20 +346,20 @@ button[hidden], [hidden] { display: none !important; }
     </div>
 
     <section class="living section-pad" id="living">
-      <div class="living-heading reveal-section">
+      <div class="living-heading reveal-section" data-section-reveal>
         <div><p class="section-kicker">Life within</p><h2>The details you live with.</h2></div>
         <p>A building is more than its silhouette. Quiet interiors, usable terraces and materials that age well make the everyday experience just as considered as the architecture.</p>
       </div>
       <div class="living-grid material-accordion" data-material-accordion>
-        <figure class="material-panel" data-material-panel>
+        <figure class="material-panel" data-material-panel data-section-reveal="single">
           <img src="./assets/residence-interior-detail-1536.webp" srcset="./assets/residence-interior-detail-640.webp 640w, ./assets/residence-interior-detail-960.webp 960w, ./assets/residence-interior-detail-1536.webp 1536w" sizes="(max-width: 640px) 100vw, 65vw" width="1536" height="1024" loading="lazy" decoding="async" alt="Concept residence with limestone floors, oak panels and a light-filled planted terrace" />
           <figcaption><button type="button" data-material-toggle aria-expanded="true" aria-controls="material-interior"><span class="material-label">Interior</span><strong class="material-title">Room to breathe.</strong><span class="material-arrow" aria-hidden="true">↗</span></button><p id="material-interior" data-material-detail>Generous proportions, open horizons and a quieter kind of luxury.</p></figcaption>
         </figure>
-        <figure class="material-panel" data-material-panel>
+        <figure class="material-panel" data-material-panel data-section-reveal="single">
           <img src="./assets/material-detail-detail-1536.webp" srcset="./assets/material-detail-detail-640.webp 640w, ./assets/material-detail-detail-960.webp 960w, ./assets/material-detail-detail-1536.webp 1536w" sizes="(max-width: 640px) 100vw, 65vw" width="1536" height="1024" loading="lazy" decoding="async" alt="Sunlit travertine entrance with a ribbed bronze frame and warm oak ceiling" />
           <figcaption><button type="button" data-material-toggle aria-expanded="true" aria-controls="material-finishes"><span class="material-label">Material</span><strong class="material-title">Honest by nature.</strong><span class="material-arrow" aria-hidden="true">↗</span></button><p id="material-finishes" data-material-detail>Travertine, warm oak and bronze. Chosen to feel better with time.</p></figcaption>
         </figure>
-        <figure class="material-panel" data-material-panel>
+        <figure class="material-panel" data-material-panel data-section-reveal="single">
           <img src="./assets/vela-detail-1536.webp" srcset="./assets/vela-detail-640.webp 640w, ./assets/vela-detail-960.webp 960w, ./assets/vela-detail-1536.webp 1536w" sizes="(max-width: 640px) 100vw, 65vw" width="1536" height="1024" loading="lazy" decoding="async" alt="Waterfront terraces of the Vela residential concept" />
           <figcaption><button type="button" data-material-toggle aria-expanded="true" aria-controls="material-terraces"><span class="material-label">Outdoor</span><strong class="material-title">Closer to the sky.</strong><span class="material-arrow" aria-hidden="true">↗</span></button><p id="material-terraces" data-material-detail>Planted terraces and shaded balconies that make room for everyday life.</p></figcaption>
         </figure>
@@ -362,7 +368,7 @@ button[hidden], [hidden] { display: none !important; }
     </section>
 
     <section class="approach" id="approach">
-      <div class="approach-sticky section-pad">
+      <div class="approach-sticky section-pad" data-section-reveal>
         <p class="section-kicker">The discipline behind the design</p>
         <h2>A clear plan.<br/>A stronger building.</h2>
         <p class="approach-intro">Before a building takes shape, its location, spaces and construction details need to work together.</p>
@@ -394,15 +400,15 @@ button[hidden], [hidden] { display: none !important; }
         </div>
       </div>
       <div class="approach-steps section-pad">
-        <article class="step reveal-section"><span>Site</span><div><h3>Start with a sense of place.</h3><p>A careful reading of the location—its light, climate and character—gives every concept a reason to belong.</p></div></article>
-        <article class="step reveal-section"><span>People</span><div><h3>Let life shape the plan.</h3><p>Arrival, gathering, retreat. We imagine the moments that make a building useful, then give them space.</p></div></article>
-        <article class="step reveal-section"><span>Detail</span><div><h3>Resolve what you feel.</h3><p>From façade rhythm to the texture of a handrail, every detail should reinforce the same clear architectural idea.</p></div></article>
-        <article class="step reveal-section"><span>Delivery</span><div><h3>Carry the idea through.</h3><p>A considered delivery strategy connects the concept to material choices, construction planning and a thoughtful handover.</p></div></article>
+        <article class="step reveal-section" data-section-reveal><span>Site</span><div><h3>Start with a sense of place.</h3><p>A careful reading of the location—its light, climate and character—gives every concept a reason to belong.</p></div></article>
+        <article class="step reveal-section" data-section-reveal><span>People</span><div><h3>Let life shape the plan.</h3><p>Arrival, gathering, retreat. We imagine the moments that make a building useful, then give them space.</p></div></article>
+        <article class="step reveal-section" data-section-reveal><span>Detail</span><div><h3>Resolve what you feel.</h3><p>From façade rhythm to the texture of a handrail, every detail should reinforce the same clear architectural idea.</p></div></article>
+        <article class="step reveal-section" data-section-reveal><span>Delivery</span><div><h3>Carry the idea through.</h3><p>A considered delivery strategy connects the concept to material choices, construction planning and a thoughtful handover.</p></div></article>
       </div>
     </section>
 
     <section class="model-showcase" id="model-study">
-      <div class="model-copy reveal-section">
+      <div class="model-copy reveal-section" data-section-reveal>
         <p class="section-kicker">The design studio</p>
         <h2>From drawing<br/>to dimension.</h2>
         <p>Explore an interactive massing study: a public-facing podium, stepped residential volumes and planted terraces. Rotate the model or switch to wireframe to examine the building’s structure. This is an illustrative concept, not a construction-ready model.</p>
@@ -422,18 +428,18 @@ button[hidden], [hidden] { display: none !important; }
       </div>
     </section>
 
-    <section class="quote section-pad reveal-section">
+    <section class="quote section-pad" data-section-reveal>
       <p class="section-kicker">The Nova promise</p>
-      <blockquote>“Great buildings make an impression.<br/><i>Exceptional ones make a difference.</i>”</blockquote>
+      <blockquote data-word-reveal>“Great buildings make an impression.<br/><i>Exceptional ones make a difference.</i>”</blockquote>
       <p class="quote-credit">Our commitment <span>To place. To people. To what comes next.</span></p>
     </section>
 
     <section class="consultation" id="consultation">
-      <div class="consultation-copy section-pad reveal-section">
+      <div class="consultation-copy section-pad" data-section-reveal>
         <p class="section-kicker">Your next chapter</p>
-        <h2>Let’s discuss<br/>your next move.</h2>
+        <h2 data-word-reveal data-reveal-tone="dark">Let’s discuss<br/>your next move.</h2>
         <p>Whether you are seeking a landmark residence, a strategic investment, or a development partner, our advisory team will make the first conversation useful.</p>
-        <div class="contact-note"><span>Start with a conversation</span><strong>A residence. An investment. A new possibility.</strong><a class="text-link" href="#projects">Still exploring? View the collection <span aria-hidden="true">↗</span></a></div>
+        <div class="contact-note" data-ui-reveal><span>Start with a conversation</span><strong>A residence. An investment. A new possibility.</strong><a class="text-link" href="#projects">Still exploring? View the collection <span aria-hidden="true">↗</span></a></div>
       </div>
       <form class="consultation-form" data-consultation-form>
         <label><span>Your name</span><input name="name" autocomplete="name" required placeholder="Full name" /></label>
@@ -466,6 +472,8 @@ button[hidden], [hidden] { display: none !important; }
   <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/lenis@1.3.11/dist/lenis.min.js"></script>
   <script defer src="./hero-sequence.js"></script>
+  <script defer src="./text-reveal.js"></script>
+  <script defer src="./section-reveal.js"></script>
   <script defer src="./script.js"></script>
 </body>
 </html>

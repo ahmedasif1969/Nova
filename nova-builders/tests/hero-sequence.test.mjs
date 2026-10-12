@@ -5,21 +5,21 @@ import { runInNewContext } from 'node:vm';
 import { createHash } from 'node:crypto';
 
 const source = await readFile(new URL('../dist/hero-sequence.js', import.meta.url), 'utf8');
-function fixture({ mobile = false, deviceMemory = 8, slowDecode = false, fail = false } = {}) {
+function fixture({ mobile = false, deviceMemory = 8, slowDecode = false, fail = false, width = mobile ? 390 : 1440, height = mobile ? 844 : 900, dpr = 3 } = {}) {
   const frames = new Map(), requests = [], bitmaps = [], decodes = [];
   const painted = [], errors = [];
   let id = 0, time = 0, live = 0, peak = 0;
-  const canvas = { hidden: true, clientWidth: 1440, clientHeight: 900,
-    getContext: () => ({ drawImage(bitmap) { assert.equal(bitmap.closed, false); painted.push(bitmap.index); } }) };
+  const context = { drawImage(bitmap) { assert.equal(bitmap.closed, false); painted.push(bitmap.index); } };
+  const canvas = { hidden: true, clientWidth: width, clientHeight: height, getContext: () => context };
   const document = { hidden: false };
   const bitmap = blob => {
     live++; peak = Math.max(peak, live);
-    const image = { index: blob.index, width: mobile ? 960 : 1344, height: mobile ? 548 : 768, closed: false,
+    const image = { index: blob.index, width: 1344, height: 768, closed: false,
       close() { assert.equal(this.closed, false, 'Do not close a buffer twice'); this.closed = true; live--; } };
     bitmaps.push(image); return image;
   };
   const decode = blob => slowDecode ? new Promise(resolve => decodes.push(() => resolve(bitmap(blob)))) : Promise.resolve(bitmap(blob));
-  const window = { createImageBitmap: decode, AbortController, devicePixelRatio: 3, innerWidth: 1440, innerHeight: 900,
+  const window = { createImageBitmap: decode, AbortController, devicePixelRatio: dpr, innerWidth: width, innerHeight: height,
     matchMedia: () => ({ matches: mobile }) };
   runInNewContext(source, { window, document, navigator: { deviceMemory }, AbortController, DOMException,
     createImageBitmap: decode,
@@ -38,7 +38,7 @@ function fixture({ mobile = false, deviceMemory = 8, slowDecode = false, fail = 
     await microtasks();
   };
   const settle = async () => { for (let i = 0; i < 500; i++) { await tick(); if (!frames.size && !api.stats().pending) return; } throw new Error('Sequence did not settle'); };
-  return { api, canvas, document, requests, bitmaps, decodes, painted, errors, callbacks, frames, tick, settle, microtasks,
+  return { api, canvas, context, document, requests, bitmaps, decodes, painted, errors, callbacks, frames, tick, settle, microtasks,
     live: () => live, peak: () => peak };
 }
 
@@ -62,7 +62,7 @@ test('sequence is lazy, renders all the way forward and reverse, and stops witho
 });
 
 test('decoded cache, decode concurrency and backing store stay bounded on desktop/mobile', async () => {
-  for (const options of [{}, { mobile: true }, { deviceMemory: 4 }]) {
+  for (const options of [{}, { mobile: true }, { mobile: true, deviceMemory: 4 }, { width: 3840, height: 2160 }]) {
     const p = fixture(options);
     for (const target of [1, 0, .7, .2, .95, .01]) {
       p.api.setProgress(target, true);
@@ -73,12 +73,42 @@ test('decoded cache, decode concurrency and backing store stay bounded on deskto
       }
     }
     assert.ok(p.peak() <= p.api.stats().capacity + 2, 'Include transient decoding buffers in the bound');
-    assert.ok(p.canvas.width * p.canvas.height <= 2002000, 'Backing store remains approximately <=2 million pixels');
+    assert.ok(p.canvas.width * p.canvas.height <= (options.deviceMemory === 4 ? 2000000 : 4000000), 'Backing store respects the device pixel budget');
     assert.equal(p.api.stats().capacity, options.deviceMemory === 4 ? 8 : options.mobile ? 10 : 12);
-    assert.ok(p.requests.every(request => request.url.includes(options.mobile ? '/mobile/' : '/desktop/')));
+    assert.ok(p.requests.every(request => request.url.includes('/desktop/')), 'Phones also download the original-resolution frames');
     p.api.destroy(); await p.microtasks();
     assert.equal(p.live(), 0);
   }
+});
+
+test('phone canvas preserves 2x/3x pixel dimensions after rotation', async () => {
+  for (const dpr of [2, 3]) {
+    const p = fixture({ mobile: true, dpr });
+    p.api.setProgress(.5, true); await p.settle();
+    assert.equal(p.canvas.width, 390 * dpr);
+    assert.equal(p.canvas.height, 844 * dpr);
+    assert.equal(p.context.imageSmoothingEnabled, true);
+    assert.equal(p.context.imageSmoothingQuality, 'high');
+    const frame = p.api.stats().displayed;
+    p.canvas.clientWidth = 844; p.canvas.clientHeight = 390;
+    p.api.resize();
+    assert.equal(p.canvas.width, 844 * dpr);
+    assert.equal(p.canvas.height, 390 * dpr);
+    assert.equal(p.api.stats().displayed, frame);
+    assert.equal(p.canvas.hidden, false);
+    p.api.destroy(); await p.microtasks();
+    assert.equal(p.live(), 0);
+  }
+});
+
+test('exact half-frame targets settle from either direction without an idle redraw loop', async () => {
+  const p = fixture({ mobile: true });
+  for (const target of [0, .5, 1, .5]) {
+    p.api.setProgress(target, true); await p.settle();
+    assert.equal(p.api.stats().displayed, Math.round(target * 293));
+    assert.equal(p.frames.size, 0);
+  }
+  p.api.destroy(); await p.microtasks();
 });
 
 test('offscreen/hidden suspension releases images and closes late decodes without resurrecting work', async () => {
@@ -134,7 +164,7 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
   assert.equal(p.canvas.hidden, false);
   assert.equal(p.canvas.width, width, 'Do not clear retained pixels without a replacement');
   p.api.setProgress(.3, true); await p.settle();
-  assert.equal(p.canvas.width, 800);
+  assert.equal(p.canvas.width, 1686);
   assert.equal(p.api.stats().displayed, Math.round(.3 * 293));
   p.api.destroy(); await p.microtasks();
 });

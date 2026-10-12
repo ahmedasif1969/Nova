@@ -97,7 +97,7 @@ test('hero styling preserves natural media colours with localized lighter shadin
 test('philosophy shows the full company name and promise uses paired inline quotation marks', () => {
   assert.match(html, /<span class="philosophy-brand">Nova <small>Builders &amp; Developers<\/small><\/span>/);
   assert.doesNotMatch(html, /class="small-monogram"|class="quote-mark"/);
-  assert.match(html, /<blockquote>“Great buildings make an impression\.<br\/><i>Exceptional ones make a difference\.<\/i>”<\/blockquote>/);
+  assert.match(html, /<blockquote data-word-reveal>“Great buildings make an impression\.<br\/><i>Exceptional ones make a difference\.<\/i>”<\/blockquote>/);
   assert.doesNotMatch(css, /\.quote-mark\s*\{/);
   for (const [width, height] of [[1440, 900], [820, 1180], [390, 844]]) {
     const rules = resolvedRules(source, width, height, false);

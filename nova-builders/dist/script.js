@@ -361,6 +361,7 @@
   }
 
   const marqueeToggle = document.querySelector('[data-marquee-toggle]');
+  const sectionReveals = new Map();
   if (marqueeToggle) marqueeToggle.hidden = true;
 
   if (window.gsap && window.ScrollTrigger) {
@@ -377,6 +378,7 @@
         gsap.from('.hero h1 > span', { y: 12, stagger: .08, duration: .65, ease: 'power3.out', clearProps: 'transform' });
       }
       document.querySelectorAll('.reveal-section').forEach(el => {
+        if (window.NovaSectionReveal && typeof gsap.matchMedia === 'function' && el.closest('[data-section-reveal]')) return;
         if (el.getBoundingClientRect().top < window.innerHeight * .9) return;
         gsap.from(el, { y: 16, opacity: 0, duration: .65, ease: 'power2.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: el, start: 'top 90%', once: true } });
       });
@@ -397,18 +399,24 @@
     if (typeof gsap.matchMedia === 'function') {
       const chapterMotion = gsap.matchMedia();
       chapterMotion.add('(prefers-reduced-motion: no-preference)', () => {
-        const originalParagraphs = [];
-        document.querySelectorAll('[data-word-reveal]').forEach(paragraph => {
-          const original = paragraph.textContent;
-          const words = original.trim().split(/\s+/).map(word => {
-            const span = document.createElement('span');
-            span.textContent = word;
-            return span;
+        const restoreText = [];
+        if (typeof window.NovaTextReveal === 'function') {
+          document.querySelectorAll('[data-word-reveal]').forEach(element => {
+            restoreText.push(window.NovaTextReveal({ element, gsap }));
           });
-          paragraph.replaceChildren(...words.flatMap(word => [word, document.createTextNode(' ')]));
-          originalParagraphs.push([paragraph, original]);
-          gsap.fromTo(words, { opacity: .1 }, { opacity: 1, stagger: .08, ease: 'none', scrollTrigger: { trigger: paragraph, start: 'top 85%', end: 'bottom 45%', scrub: .5 } });
+        }
+        document.querySelectorAll('[data-ui-reveal]').forEach(element => {
+          gsap.fromTo(element, { y: 14 }, {
+            y: 0, ease: 'none',
+            scrollTrigger: { trigger: element, start: 'top 92%', end: 'top 70%', scrub: .4, invalidateOnRefresh: true }
+          });
         });
+        if (typeof window.NovaSectionReveal === 'function') {
+          document.querySelectorAll('[data-section-reveal]').forEach(root => {
+            const controller = window.NovaSectionReveal({ root, gsap });
+            if (controller) sectionReveals.set(root, controller);
+          });
+        }
 
         const marquee = document.querySelector('[data-principles-marquee]');
         let cleanupMarquee = () => {};
@@ -442,7 +450,9 @@
         }
         return () => {
           cleanupMarquee();
-          originalParagraphs.forEach(([paragraph, original]) => { paragraph.textContent = original; });
+          restoreText.forEach(restore => restore());
+          sectionReveals.forEach(controller => controller.restore());
+          sectionReveals.clear();
         };
       });
 
@@ -487,6 +497,9 @@
     });
     document.querySelector('.project-list').classList.toggle('filtered', category !== 'all');
     cards.forEach(card => { card.hidden = category !== 'all' && card.dataset.category !== category; });
+    sectionReveals.forEach((controller, root) => {
+      if (cards.some(card => card === root || card.contains(root))) controller.complete();
+    });
     const count = cards.filter(card => !card.hidden).length;
     document.querySelector('.project-list').dataset.visibleCount = String(count);
     document.querySelector('[data-project-count]').textContent = `${String(count).padStart(2, '0')} ${count === 1 ? 'development' : 'developments'}`;

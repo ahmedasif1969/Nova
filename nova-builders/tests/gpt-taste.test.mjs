@@ -29,7 +29,7 @@ test('cinematic hero preserves the original media and serif while keeping two cl
 });
 
 test('project cells fill their grid for all filters and new chapters avoid numeric labels', () => {
-  assert.match(html, /<h2 class="philosophy-heading reveal-section">Designed for life\.<br\/>Built to belong\.<\/h2>/);
+  assert.match(html, /<h2 class="philosophy-heading reveal-section" data-section-reveal="single">Designed for life\.<br\/>Built to belong\.<\/h2>/);
   assert.doesNotMatch(html, /inline-study/);
   assert.doesNotMatch(css, /\.inline-study/);
   const spansByFilter = [[2, 1, 1], [1, 1], [2]];
