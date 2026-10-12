@@ -61,9 +61,10 @@
   });
 
   const scrollTo = target => {
-    // Settle the destination before measuring it or starting anchor scrolling.
+    // Settle only the landing viewport, not every later item in a tall section.
+    const landingBottom = target.getBoundingClientRect().top + window.innerHeight - 88;
     sectionReveals.forEach((controller, root) => {
-      if (root === target || target.contains(root)) controller.complete();
+      if (root === target || target.contains(root)) controller.settleBefore(landingBottom);
     });
     if (lenis) lenis.scrollTo(target, { offset: -88 });
     else target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
@@ -390,7 +391,7 @@
       const blueprintTimeline = gsap.timeline({ scrollTrigger: phoneBlueprint
         // On phones, draw visibly between the bottom and middle of the screen,
         // with no delayed catch-up after scrolling stops.
-        ? { trigger: '.approach-visual', start: 'top 95%', end: 'top 55%', scrub: true, invalidateOnRefresh: true }
+        ? { trigger: '.approach-visual', start: 'top 85%', end: 'top 35%', scrub: true, invalidateOnRefresh: true }
         : { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 }
       });
       document.querySelectorAll('.blueprint-line').forEach((line, index) => {

@@ -12,17 +12,18 @@ function element(ui = false) {
   return {
     dataset: {}, children: [], classes, listeners,
     classList: { add: name => classes.add(name), remove: name => classes.delete(name) },
-    matches: selector => selector === '[data-ui-reveal]' && ui,
+    matches: selector => selector.includes('[data-ui-reveal]') && ui,
     addEventListener: (event, callback) => listeners.set(event, callback),
     removeEventListener: (event, callback) => { if (listeners.get(event) === callback) listeners.delete(event); }
   };
 }
 
-function fixture({ mobile = false, top = 5000, single = false } = {}) {
+function fixture({ mobile = false, top = 5000, single = false, childTops = [top, top, top] } = {}) {
   const root = element(), calls = [], clears = [], initial = [], triggers = [];
   root.children = [element(), element(true), element()];
   root.dataset.sectionReveal = single ? 'single' : '';
   root.getBoundingClientRect = () => ({ top });
+  root.children.forEach((child, index) => { child.getBoundingClientRect = () => ({ top: childTops[index] }); });
   const window = { innerHeight: 1000, matchMedia: query => ({ matches: query === '(max-width: 900px)' && mobile }) };
   const gsap = {
     to(targets, config) {
@@ -41,17 +42,21 @@ function fixture({ mobile = false, top = 5000, single = false } = {}) {
   return { root, calls, clears, initial, triggers, controller };
 }
 
-test('section entry staggers children with a stronger fade-up, without fighting UI scrubs', () => {
+test('each visual block owns its trigger instead of revealing an entire tall group', () => {
   const p = fixture(), { targets, config } = p.calls[0];
-  assert.equal(targets.length, 2);
-  assert.equal(targets[0], p.root.children[0]); assert.equal(targets[1], p.root.children[2]);
+  assert.equal(targets.length, 1);
+  assert.equal(p.calls.length, 2);
+  assert.equal(targets[0], p.root.children[0]); assert.equal(p.calls[1].targets[0], p.root.children[2]);
   assert.equal(p.initial[0].config.y, 24); assert.equal(p.initial[0].config.opacity, 0);
   assert.equal(config.y, 0); assert.equal(config.opacity, 1);
-  assert.equal(config.duration, .45); assert.equal(config.stagger, .04);
+  assert.equal(config.duration, .45); assert.equal(config.stagger, undefined);
   assert.equal(config.paused, true);
   assert.equal(config.scrollTrigger, undefined, 'Refresh must not control or invalidate the entrance tween');
-  assert.equal(p.triggers[0].config.start, 'top bottom+=80');
-  assert.equal(p.triggers[0].config.trigger, p.root);
+  assert.equal(p.triggers[0].config.start, 'top 88%');
+  assert.equal(p.triggers[0].config.trigger, p.root.children[0]);
+  assert.equal(p.triggers[1].config.trigger, p.root.children[2]);
+  p.triggers[0].config.onEnter();
+  assert.equal(p.calls[1].tween.plays, 0, 'Lower content must wait for its own entry');
   assert.equal(p.triggers[0].config.pin, undefined);
   assert.ok(targets.every(target => target.classes.has('section-reveal-item')));
   assert.equal(p.root.children[1].classes.size, 0);
@@ -61,8 +66,8 @@ test('mobile entry visibly fades up just inside the viewport', () => {
   const p = fixture({ mobile: true, single: true });
   assert.equal(p.initial[0].config.y, 12);
   assert.equal(p.calls[0].config.duration, .4);
-  assert.equal(p.calls[0].config.stagger, .04);
-  assert.equal(p.triggers[0].config.start, 'top 96%');
+  assert.equal(p.calls[0].config.stagger, undefined);
+  assert.equal(p.triggers[0].config.start, 'top 88%');
   assert.equal(p.calls[0].targets.length, 1);
   assert.equal(p.calls[0].targets[0], p.root);
   assert.ok(p.root.children.every(child => child.classes.size === 0));
@@ -85,12 +90,22 @@ test('phone entry is allowed to animate while visible instead of completing at t
 });
 
 test('visible and previously passed content is not hidden on refresh or direct anchors', () => {
-  for (const top of [-3000, 0, 999, 1000, 1079, 1080]) {
+  for (const top of [-3000, 0, 999, 1000]) {
     const p = fixture({ top });
     assert.equal(p.controller, null); assert.equal(p.calls.length, 0);
     assert.equal(p.root.listeners.size, 0);
   }
-  assert.equal(fixture({ top: 1081 }).calls.length, 1);
+  assert.equal(fixture({ top: 1001 }).calls.length, 2);
+  const mixed = fixture({ top: 100, childTops: [100, 100, 1800] });
+  assert.equal(mixed.calls.length, 1, 'Visible heading must not skip its offscreen sibling');
+  assert.equal(mixed.triggers[0].config.trigger, mixed.root.children[2]);
+});
+
+test('anchor settling leaves later blocks waiting for their own entry', () => {
+  const p = fixture({ childTops: [1200, 1200, 2000] });
+  p.controller.settleBefore(1500);
+  assert.equal(p.calls[0].tween.completions, 1);
+  assert.equal(p.calls[1].tween.completions, 0);
 });
 
 test('keyboard focus and filter completion finish the entrance and cleanup is idempotent', () => {
@@ -98,13 +113,13 @@ test('keyboard focus and filter completion finish the entrance and cleanup is id
   p.root.listeners.get('focusin')();
   p.controller.complete(); p.controller.restore(); p.controller.restore();
   assert.equal(tween.completions, 1); assert.equal(tween.kills, 1); assert.equal(p.triggers[0].kills, 1);
-  assert.equal(p.clears.length, 1); assert.equal(p.clears[0].config.clearProps, 'transform,opacity');
+  assert.equal(p.clears.length, 2); assert.equal(p.clears[0].config.clearProps, 'transform,opacity');
   assert.equal(p.root.listeners.size, 0);
   assert.ok(p.root.children.every(child => child.classes.size === 0));
 });
 
 test('refresh cannot uncover an upcoming entrance or restart a completed one', () => {
-  const p = fixture(), { config, tween } = p.calls[0], trigger = p.triggers[0].config;
+  const p = fixture({ single: true }), { config, tween } = p.calls[0], trigger = p.triggers[0].config;
   trigger.onRefresh({ progress: 0 });
   assert.equal(p.initial.length, 1); assert.equal(p.clears.length, 0); assert.equal(tween.plays, 0);
   trigger.onEnter(); assert.equal(tween.plays, 1);

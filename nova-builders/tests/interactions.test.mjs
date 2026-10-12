@@ -39,7 +39,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     async emit(type, details = {}) { for (const fn of this.listeners[type] || []) await fn({ target: this, preventDefault() {}, ...details }); }
     querySelector(selector) { return nodes.get(selector) ?? groups.get(selector)?.[0] ?? null; }
     querySelectorAll(selector) { return groups.get(selector) ?? []; }
-    matches(selector) { return selector === '[data-ui-reveal]' && 'uiReveal' in this.dataset; }
+      matches(selector) { return selector.includes('[data-ui-reveal]') && 'uiReveal' in this.dataset; }
     closest(selector) { return selector === '[data-section-reveal]' && 'sectionReveal' in this.dataset ? this : null; }
     focus() { document.activeElement = this; }
     select() { this.selected = true; }
@@ -153,6 +153,10 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
       card.dataset.sectionReveal = '';
       card.append(new Element(), new Element());
       card.getBoundingClientRect = () => ({ top: 5000 });
+        card.children.forEach(child => {
+          child.getBoundingClientRect = () => ({ top: 5000 });
+          child.querySelector = () => null;
+        });
     });
     groups.set('[data-section-reveal]', cards);
     groups.set('.reveal-section', cards);
@@ -567,9 +571,9 @@ test('material chapters support click, touch and wrapping keyboard navigation wi
 test('section reveals mount once, project filters finish pending entrances, and media cleanup restores content', async () => {
   const p = pageFixture({ motionLibrary: true, sectionLibrary: true });
   const entries = p.motionCalls.filter(call => typeof call.config.onComplete === 'function');
-  assert.equal(entries.length, 3);
+  assert.equal(entries.length, 6);
   assert.ok(entries.every(call => call.config.paused && !call.config.scrollTrigger));
-  assert.ok(entries.every(call => call.target.length === 2));
+  assert.ok(entries.every(call => call.target.length === 1));
   assert.ok(!p.motionCalls.some(call => call.config.y === 16), 'Do not run old and new entry tweens together');
   await p.filters[2].emit('click');
   assert.deepEqual(p.cards.map(card => card.hidden), [true, true, false]);
@@ -583,13 +587,13 @@ test('section reveals mount once, project filters finish pending entrances, and 
   assert.equal(p.video.loads, 0, 'New chapter motion must not trigger hero downloads');
 });
 
-test('anchor navigation settles the destination before scrolling there', async () => {
+test('anchor navigation does not finish offscreen content farther down the destination', async () => {
   const p = pageFixture({ motionLibrary: true, sectionLibrary: true });
   const entries = p.motionCalls.filter(call => typeof call.config.onComplete === 'function');
   const target = p.nodes.get('#projects');
   let checked = false;
   target.scrollIntoView = () => {
-    assert.ok(entries.every(call => call.instance.completions === 1 && call.instance.killed));
+    assert.ok(entries.every(call => call.instance.completions === 0));
     checked = true;
   };
   await p.document.querySelectorAll('a[href^="#"]')[0].emit('click');
@@ -607,8 +611,8 @@ test('section reveals do not hide content with reduced motion or a missing anima
 
 test('editorial motion scrubs words and pauses the marquee offscreen, hidden or by choice', async () => {
   const p = pageFixture({ motionLibrary: true });
-  const reveal = p.motionCalls.find(call => call.from);
-  assert.equal(reveal.from.opacity, 0);
+  const reveal = p.motionCalls.find(call => call.config.scrollTrigger?.scrub === .2);
+  assert.equal(reveal.config.opacity, 1);
   assert.equal(reveal.config.scrollTrigger.scrub, .2);
   assert.ok(reveal.target.every(word => word.getAttribute('aria-hidden') === 'true'));
   assert.ok(!p.motionCalls.some(call => call.from?.y === 14), 'Supporting UI must not translate back and forth during scrolling');

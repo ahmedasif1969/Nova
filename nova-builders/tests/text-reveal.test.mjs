@@ -59,7 +59,7 @@ function fixture() {
   const window = {}, calls = [];
   const document = { createElement: tag => new Node(tag), createTextNode: text, createDocumentFragment: () => new Node('#fragment') };
   runInNewContext(source, { window, document, getComputedStyle: node => ({ color: node.tag === 'i' ? 'rgb(121, 100, 73)' : 'rgb(34, 40, 36)' }) });
-  const gsap = { fromTo(target, from, config) {
+  const gsap = { set(target, config) { target.forEach(ink => { ink.style.opacity = config.opacity; }); }, to(target, config) {
     const tween = { killed: false, triggerKilled: false,
       kill() { this.killed = true; }, scrollTrigger: { kill() { tween.triggerKilled = true; } },
       progress(p) {
@@ -67,7 +67,7 @@ function fixture() {
         target.forEach((ink, index) => { ink.style.opacity = Math.max(0, Math.min(1, (p * duration - index * config.stagger) / config.duration)); });
       }
     };
-    calls.push({ target, from, config, tween }); tween.progress(0); return tween;
+    calls.push({ target, config, tween }); tween.progress(0); return tween;
   } };
   return { window, gsap, calls };
 }
@@ -105,15 +105,15 @@ test('highlight has a reversible sequential opacity timeline and never moves gly
   paragraph.append(text('A place  should feel right.\nThe light. The proportions.'));
   const original = accessibleText(paragraph);
   p.window.NovaTextReveal({ element: paragraph, gsap: p.gsap });
-  const { from, config, tween, target } = p.calls[0];
-  assert.equal(from.opacity, 0); assert.equal(config.opacity, 1);
+  const { config, tween, target } = p.calls[0];
+  assert.ok(target.every(ink => ink.style.opacity === 0)); assert.equal(config.opacity, 1);
   assert.equal(config.scrollTrigger.scrub, .2);
   assert.equal(config.duration, .18);
   assert.equal(config.stagger, config.duration, 'Only one word changes at a time');
   assert.equal(config.scrollTrigger.start, 'top 78%');
   assert.equal(config.scrollTrigger.end, 'bottom 35%');
   assert.equal(config.scrollTrigger.once, undefined, 'Reversing scroll reverses the highlight');
-  assert.equal(config.scrollTrigger.invalidateOnRefresh, true);
+  assert.equal(config.scrollTrigger.invalidateOnRefresh, undefined);
   assert.equal(config.y, undefined); assert.equal(config.color, undefined);
   tween.progress(.5);
   assert.equal(target[0].style.opacity, 1);

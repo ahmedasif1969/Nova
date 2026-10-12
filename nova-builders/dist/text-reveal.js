@@ -40,9 +40,12 @@
       node.replaceWith(fragment);
     });
     element.classList.add('word-reveal-active');
-    const tween = gsap.fromTo(inks, { opacity: 0 }, {
+    // Keep every not-yet-highlighted word dim through ScrollTrigger refreshes.
+    // A staggered fromTo can revert untouched words to their CSS opacity (1).
+    gsap.set(inks, { opacity: 0 });
+    const tween = gsap.to(inks, {
       opacity: 1, duration: .18, stagger: .18, ease: 'none',
-      scrollTrigger: { trigger: element, start: 'top 78%', end: 'bottom 35%', scrub: .2, invalidateOnRefresh: true }
+      scrollTrigger: { trigger: element, start: 'top 78%', end: 'bottom 35%', scrub: .2 }
     });
     return () => {
       tween.scrollTrigger?.kill();
