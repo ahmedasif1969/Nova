@@ -379,8 +379,8 @@
       }
       document.querySelectorAll('.reveal-section').forEach(el => {
         if (window.NovaSectionReveal && typeof gsap.matchMedia === 'function' && el.closest('[data-section-reveal]')) return;
-        if (el.getBoundingClientRect().top < window.innerHeight * .9) return;
-        gsap.from(el, { y: 16, opacity: 0, duration: .65, ease: 'power2.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: el, start: 'top 90%', once: true } });
+        if (el.getBoundingClientRect().top <= window.innerHeight + 80) return;
+        gsap.from(el, { y: 16, opacity: 0, duration: .6, ease: 'power2.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: el, start: 'top bottom+=80', once: true } });
       });
       const blueprintTimeline = gsap.timeline({ scrollTrigger: { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 } });
       document.querySelectorAll('.blueprint-line').forEach((line, index) => {

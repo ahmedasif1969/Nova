@@ -45,9 +45,9 @@ test('section entry staggers children with a stronger fade-up, without fighting 
   assert.equal(targets[0], p.root.children[0]); assert.equal(targets[1], p.root.children[2]);
   assert.equal(from.y, 44); assert.equal(from.opacity, 0);
   assert.equal(config.y, 0); assert.equal(config.opacity, 1);
-  assert.equal(config.duration, .95); assert.equal(config.stagger, .12);
+  assert.equal(config.duration, .6); assert.equal(config.stagger, .06);
   assert.equal(config.clearProps, 'transform,opacity');
-  assert.equal(config.scrollTrigger.start, 'top 88%');
+  assert.equal(config.scrollTrigger.start, 'top bottom+=80');
   assert.equal(config.scrollTrigger.once, true);
   assert.equal(config.scrollTrigger.trigger, p.root);
   assert.equal(config.scrollTrigger.pin, undefined);
@@ -64,12 +64,12 @@ test('mobile entry uses smaller movement and single mode preserves panel interna
 });
 
 test('visible and previously passed content is not hidden on refresh or direct anchors', () => {
-  for (const top of [-3000, 0, 879, 880]) {
+  for (const top of [-3000, 0, 999, 1000, 1079, 1080]) {
     const p = fixture({ top });
     assert.equal(p.controller, null); assert.equal(p.calls.length, 0);
     assert.equal(p.root.listeners.size, 0);
   }
-  assert.equal(fixture({ top: 881 }).calls.length, 1);
+  assert.equal(fixture({ top: 1081 }).calls.length, 1);
 });
 
 test('keyboard focus and filter completion finish the entrance and cleanup is idempotent', () => {
