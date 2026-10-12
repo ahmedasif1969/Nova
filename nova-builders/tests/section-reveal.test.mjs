@@ -57,26 +57,30 @@ test('section entry staggers children with a stronger fade-up, without fighting 
   assert.equal(p.root.children[1].classes.size, 0);
 });
 
-test('mobile entry fades ahead of the viewport without translation or stagger', () => {
+test('mobile entry visibly fades up just inside the viewport', () => {
   const p = fixture({ mobile: true, single: true });
-  assert.equal(p.initial[0].config.y, 0);
-  assert.equal(p.calls[0].config.duration, .22);
-  assert.equal(p.calls[0].config.stagger, 0);
-  assert.equal(p.triggers[0].config.start, 'top bottom+=320');
+  assert.equal(p.initial[0].config.y, 12);
+  assert.equal(p.calls[0].config.duration, .4);
+  assert.equal(p.calls[0].config.stagger, .04);
+  assert.equal(p.triggers[0].config.start, 'top 96%');
   assert.equal(p.calls[0].targets.length, 1);
   assert.equal(p.calls[0].targets[0], p.root);
   assert.ok(p.root.children.every(child => child.classes.size === 0));
 });
 
-test('a fast phone swipe completes an entrance as soon as the group reaches the screen', () => {
+test('phone entry is allowed to animate while visible instead of completing at the viewport edge', () => {
   const p = fixture({ mobile: true });
   p.triggers[0].config.onEnter();
   assert.equal(p.calls[0].tween.plays, 1);
   p.root.getBoundingClientRect = () => ({ top: 999 });
-  p.triggers[0].config.onUpdate();
+  p.triggers[0].config.onRefresh({ progress: .1 });
+  assert.equal(p.triggers[0].config.onUpdate, undefined);
+  assert.equal(p.calls[0].tween.completions, 0);
+  assert.equal(p.clears.length, 0);
+  p.calls[0].config.onComplete();
   assert.equal(p.calls[0].tween.completions, 1);
   assert.equal(p.clears.length, 1);
-  p.triggers[0].config.onUpdate();
+  p.triggers[0].config.onRefresh({ progress: .1 });
   assert.equal(p.clears.length, 1);
 });
 

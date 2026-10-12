@@ -388,9 +388,9 @@
       // leave content static instead of starting a second reveal system.
       const phoneBlueprint = window.matchMedia('(max-width: 900px)').matches;
       const blueprintTimeline = gsap.timeline({ scrollTrigger: phoneBlueprint
-        // On phones, draw during the section's introduction and finish as
-        // the drawing enters view. No delayed scrub after it is onscreen.
-        ? { trigger: '.approach-sticky', start: 'top bottom+=240', endTrigger: '.approach-visual', end: 'top bottom', scrub: true, invalidateOnRefresh: true }
+        // On phones, draw visibly between the bottom and middle of the screen,
+        // with no delayed catch-up after scrolling stops.
+        ? { trigger: '.approach-visual', start: 'top 95%', end: 'top 55%', scrub: true, invalidateOnRefresh: true }
         : { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 }
       });
       document.querySelectorAll('.blueprint-line').forEach((line, index) => {
