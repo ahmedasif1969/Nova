@@ -1,7 +1,7 @@
 /* Section entry choreography. Only transform/opacity; no hero or canvas move. */
 (function () {
   'use strict';
-  window.NovaSectionReveal = function ({ root, gsap }) {
+  window.NovaSectionReveal = function ({ root, gsap, ScrollTrigger }) {
     // Begin just before entry; don't hide content already inside that range
     // on refresh, direct links or restored scroll.
     if (root.getBoundingClientRect().top <= window.innerHeight + 80) return null;
@@ -11,20 +11,33 @@
     const targets = candidates.filter(element => !element.matches('[data-ui-reveal]'));
     if (!targets.length) return null;
     targets.forEach(element => element.classList.add('section-reveal-item'));
-    const tween = gsap.fromTo(targets, { y: mobile ? 28 : 44, opacity: 0 }, {
-      y: 0, opacity: 1, duration: .6, stagger: .06, ease: 'power3.out',
-      clearProps: 'transform,opacity',
-      scrollTrigger: { trigger: root, start: 'top bottom+=80', once: true, invalidateOnRefresh: true }
-    });
     let completed = false;
+    let trigger;
+    let tween;
     const complete = () => {
       if (completed) return;
       completed = true;
-      tween.progress(1);
-      tween.scrollTrigger?.kill();
+      trigger?.kill();
+      // Suppress callbacks when completing for focus, anchors or fast scrolling.
+      tween.progress(1, true);
       tween.kill();
       gsap.set(targets, { clearProps: 'transform,opacity' });
     };
+    // Keep the initial state separate from ScrollTrigger. A scrubbed fromTo
+    // with clearProps can lose its initial styles during a refresh, then
+    // reapply the offset to already-visible content when its trigger fires.
+    gsap.set(targets, { y: mobile ? 18 : 24, opacity: 0 });
+    tween = gsap.to(targets, {
+      y: 0, opacity: 1, duration: .45, stagger: .04, ease: 'power2.out',
+      paused: true, onComplete: complete
+    });
+    const play = () => { if (!completed) tween.play(); };
+    trigger = ScrollTrigger.create({
+      trigger: root, start: 'top bottom+=80', end: 'bottom top',
+      onEnter: play, onEnterBack: play, onLeave: complete,
+      onRefresh: self => { if (self.progress === 1) complete(); }
+    });
+    if (completed) trigger.kill();
     // Keyboard users never land on an invisible control during its entrance.
     root.addEventListener('focusin', complete);
     return {

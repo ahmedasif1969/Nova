@@ -119,14 +119,14 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   let gsap; let ScrollTrigger;
   if (motionLibrary) {
     const tween = (target, config) => {
-      const instance = { paused: !!config.paused, play() { this.paused = false; }, pause() { this.paused = true; } };
+      const instance = { paused: !!config.paused, completions: 0, killed: false, progress(p) { if (p === 1) this.completions++; }, kill() { this.killed = true; }, play() { this.paused = false; }, pause() { this.paused = true; } };
       motionCalls.push({ target, config, instance }); return instance;
     };
     gsap = { registerPlugin() {}, from(target, config) { return tween(target, config); }, fromTo(target, from, config) {
       const instance = { completions: 0, killed: false, progress(p) { if (p === 1) this.completions++; }, kill() { this.killed = true; }, scrollTrigger: { kill() {} } };
       motionCalls.push({ target, from, config, instance }); return instance;
     }, to: tween, set() {}, killTweensOf() {}, timeline() { return { to() { return this; } }; }, matchMedia() { return { add(query, callback) { const registration = { query, cleanup: matchesMedia(query) ? callback() : undefined }; mediaRegistrations.push(registration); } }; } };
-    ScrollTrigger = { refresh() {}, update() {}, create(config) { pins.push(config); } };
+    ScrollTrigger = { refresh() {}, update() {}, create(config) { pins.push(config); return { kill() {} }; } };
     window.gsap = gsap; window.ScrollTrigger = ScrollTrigger;
   }
   const hero = nodes.get('[data-hero]'); hero.offsetTop = 0; hero.offsetHeight = 3000;
@@ -156,6 +156,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     });
     groups.set('[data-section-reveal]', cards);
     groups.set('.reveal-section', cards);
+    nodes.get('#projects').append(...cards);
   }
   groups.set('#top, #legacy, #projects, #approach, #model-study, #consultation', ['top', 'legacy', 'projects', 'approach', 'model-study', 'consultation'].map(id => nodes.get(`#${id}`)));
   const form = nodes.get('[data-consultation-form]');
@@ -563,9 +564,9 @@ test('material chapters support click, touch and wrapping keyboard navigation wi
 
 test('section reveals mount once, project filters finish pending entrances, and media cleanup restores content', async () => {
   const p = pageFixture({ motionLibrary: true, sectionLibrary: true });
-  const entries = p.motionCalls.filter(call => call.from?.y === 44);
+  const entries = p.motionCalls.filter(call => typeof call.config.onComplete === 'function');
   assert.equal(entries.length, 3);
-  assert.ok(entries.every(call => call.config.scrollTrigger.once));
+  assert.ok(entries.every(call => call.config.paused && !call.config.scrollTrigger));
   assert.ok(entries.every(call => call.target.length === 2));
   assert.ok(!p.motionCalls.some(call => call.config.y === 16), 'Do not run old and new entry tweens together');
   await p.filters[2].emit('click');
@@ -578,6 +579,19 @@ test('section reveals mount once, project filters finish pending entrances, and 
   assert.ok(p.cards.every(card => card.listeners.focusin.length === 0));
   assert.ok(p.cards.every(card => card.children.every(child => !child.classList.contains('section-reveal-item'))));
   assert.equal(p.video.loads, 0, 'New chapter motion must not trigger hero downloads');
+});
+
+test('anchor navigation settles the destination before scrolling there', async () => {
+  const p = pageFixture({ motionLibrary: true, sectionLibrary: true });
+  const entries = p.motionCalls.filter(call => typeof call.config.onComplete === 'function');
+  const target = p.nodes.get('#projects');
+  let checked = false;
+  target.scrollIntoView = () => {
+    assert.ok(entries.every(call => call.instance.completions === 1 && call.instance.killed));
+    checked = true;
+  };
+  await p.document.querySelectorAll('a[href^="#"]')[0].emit('click');
+  assert.equal(checked, true);
 });
 
 test('section reveals do not hide content with reduced motion or a missing animation CDN', () => {
@@ -595,8 +609,7 @@ test('editorial motion scrubs words and pauses the marquee offscreen, hidden or 
   assert.equal(reveal.from.opacity, 0);
   assert.equal(reveal.config.scrollTrigger.scrub, .2);
   assert.ok(reveal.target.every(word => word.getAttribute('aria-hidden') === 'true'));
-  const ui = p.motionCalls.find(call => call.from?.y === 14);
-  assert.equal(ui.config.scrollTrigger.scrub, .4);
+  assert.ok(!p.motionCalls.some(call => call.from?.y === 14), 'Supporting UI must not translate back and forth during scrolling');
   assert.equal(p.paragraph.children.filter(child => child.textContent !== ' ').length, 7);
   const marquee = p.motionCalls.find(call => call.target === p.marqueeTrack);
   assert.equal(marquee.config.xPercent, -50);

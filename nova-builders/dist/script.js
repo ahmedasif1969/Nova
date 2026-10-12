@@ -24,6 +24,7 @@
   const form = document.querySelector('[data-consultation-form]');
   const projectDialog = document.querySelector('[data-project-dialog]');
   let lenis = null;
+  const sectionReveals = new Map();
 
   const syncScrollLock = () => {
     const locked = mobileMenu.classList.contains('open') || projectDialog.open;
@@ -60,6 +61,10 @@
   });
 
   const scrollTo = target => {
+    // Settle the destination before measuring it or starting anchor scrolling.
+    sectionReveals.forEach((controller, root) => {
+      if (root === target || target.contains(root)) controller.complete();
+    });
     if (lenis) lenis.scrollTo(target, { offset: -88 });
     else target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
   };
@@ -361,7 +366,6 @@
   }
 
   const marqueeToggle = document.querySelector('[data-marquee-toggle]');
-  const sectionReveals = new Map();
   if (marqueeToggle) marqueeToggle.hidden = true;
 
   if (window.gsap && window.ScrollTrigger) {
@@ -377,11 +381,8 @@
         // Keep the headline readable at first paint; motion should not gate LCP.
         gsap.from('.hero h1 > span', { y: 12, stagger: .08, duration: .65, ease: 'power3.out', clearProps: 'transform' });
       }
-      document.querySelectorAll('.reveal-section').forEach(el => {
-        if (window.NovaSectionReveal && typeof gsap.matchMedia === 'function' && el.closest('[data-section-reveal]')) return;
-        if (el.getBoundingClientRect().top <= window.innerHeight + 80) return;
-        gsap.from(el, { y: 16, opacity: 0, duration: .6, ease: 'power2.out', clearProps: 'transform,opacity', scrollTrigger: { trigger: el, start: 'top bottom+=80', once: true } });
-      });
+      // Section entrances have one owner below. If its module is unavailable,
+      // leave content static instead of starting a second reveal system.
       const blueprintTimeline = gsap.timeline({ scrollTrigger: { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 } });
       document.querySelectorAll('.blueprint-line').forEach((line, index) => {
         const length = line.getTotalLength();
@@ -405,15 +406,11 @@
             restoreText.push(window.NovaTextReveal({ element, gsap }));
           });
         }
-        document.querySelectorAll('[data-ui-reveal]').forEach(element => {
-          gsap.fromTo(element, { y: 14 }, {
-            y: 0, ease: 'none',
-            scrollTrigger: { trigger: element, start: 'top 92%', end: 'top 70%', scrub: .4, invalidateOnRefresh: true }
-          });
-        });
+        // Filters, metrics and notes stay anchored instead of scrubbing y
+        // back and forth while the visitor is already reading the section.
         if (typeof window.NovaSectionReveal === 'function') {
           document.querySelectorAll('[data-section-reveal]').forEach(root => {
-            const controller = window.NovaSectionReveal({ root, gsap });
+            const controller = window.NovaSectionReveal({ root, gsap, ScrollTrigger });
             if (controller) sectionReveals.set(root, controller);
           });
         }
