@@ -300,7 +300,8 @@ h2, .statement-grid h2 { font-size: clamp(2.7rem,10vw,3.8rem); }
 .material-panel:hover img, .material-panel:focus-within img { transform: scale(1.05); }
 .material-panel:hover .material-arrow { transform: translate(3px,-3px); }
 .material-accordion.is-interactive { display: flex; }
-.material-accordion.is-interactive .material-panel { flex: 1; transition: flex .7s cubic-bezier(.2,.7,.1,1); }
+.material-accordion.is-interactive .material-panel { flex: 1; }
+.material-accordion.is-interactive.has-interacted .material-panel { transition: flex .7s cubic-bezier(.2,.7,.1,1); }
 .material-accordion.is-interactive .material-panel.is-active { flex: 3.2; }
 .material-accordion.is-interactive .material-panel:not(.is-active) button { padding-bottom: 2rem; }
 .material-accordion.is-interactive .material-panel:not(.is-active) .material-title { writing-mode: vertical-rl; transform: rotate(180deg); max-width: none; font-size: 2.5rem; }
@@ -329,7 +330,8 @@ h2, .statement-grid h2 { font-size: clamp(2.7rem,10vw,3.8rem); }
 .material-title { font-size: 2.7rem; max-width: none; }
 .material-panel p { font-size: .86rem; }
 .material-accordion.is-interactive { flex-direction: column; gap: 0; }
-.material-accordion.is-interactive .material-panel { flex: auto; height: 100px; transition: height .5s cubic-bezier(.2,.7,.1,1); }
+.material-accordion.is-interactive .material-panel { flex: auto; height: 100px; }
+.material-accordion.is-interactive.has-interacted .material-panel { transition: height .5s cubic-bezier(.2,.7,.1,1); }
 .material-accordion.is-interactive .material-panel.is-active { flex: auto; height: 390px; }
 .material-accordion.is-interactive .material-panel:not(.is-active) button { padding: 1.5rem; justify-content: center; }
 .material-accordion.is-interactive .material-panel:not(.is-active) .material-title { writing-mode: horizontal-tb; transform: none; font-size: 2rem; }

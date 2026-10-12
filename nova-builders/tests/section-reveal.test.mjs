@@ -57,12 +57,27 @@ test('section entry staggers children with a stronger fade-up, without fighting 
   assert.equal(p.root.children[1].classes.size, 0);
 });
 
-test('mobile entry uses smaller movement and single mode preserves panel internals', () => {
+test('mobile entry fades ahead of the viewport without translation or stagger', () => {
   const p = fixture({ mobile: true, single: true });
-  assert.equal(p.initial[0].config.y, 18);
+  assert.equal(p.initial[0].config.y, 0);
+  assert.equal(p.calls[0].config.duration, .22);
+  assert.equal(p.calls[0].config.stagger, 0);
+  assert.equal(p.triggers[0].config.start, 'top bottom+=320');
   assert.equal(p.calls[0].targets.length, 1);
   assert.equal(p.calls[0].targets[0], p.root);
   assert.ok(p.root.children.every(child => child.classes.size === 0));
+});
+
+test('a fast phone swipe completes an entrance as soon as the group reaches the screen', () => {
+  const p = fixture({ mobile: true });
+  p.triggers[0].config.onEnter();
+  assert.equal(p.calls[0].tween.plays, 1);
+  p.root.getBoundingClientRect = () => ({ top: 999 });
+  p.triggers[0].config.onUpdate();
+  assert.equal(p.calls[0].tween.completions, 1);
+  assert.equal(p.clears.length, 1);
+  p.triggers[0].config.onUpdate();
+  assert.equal(p.clears.length, 1);
 });
 
 test('visible and previously passed content is not hidden on refresh or direct anchors', () => {
@@ -114,4 +129,6 @@ test('all main chapters have reveal groups, with hero and model canvas left unto
   assert.doesNotMatch(html, /<(?:canvas|div class="model-stage")[^>]*data-section-reveal/);
   assert.ok(html.indexOf('defer src="./section-reveal.js"') < html.indexOf('defer src="./script.js"'));
   assert.match(css, /\.section-reveal-item \{ opacity: 1 !important; transform: none !important; \}/);
+  assert.doesNotMatch(css, /\.material-accordion\.is-interactive \.material-panel \{[^}]*transition:/, 'Initial panel collapse must not invalidate downstream scroll positions');
+  assert.match(css, /\.material-accordion\.is-interactive\.has-interacted \.material-panel \{ transition: height/);
 });

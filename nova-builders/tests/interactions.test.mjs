@@ -545,7 +545,9 @@ test('material chapters support click, touch and wrapping keyboard navigation wi
   const p = pageFixture();
   const expanded = () => p.materials.map(({ button }) => button.getAttribute('aria-expanded'));
   assert.deepEqual(expanded(), ['true', 'false', 'false']);
+  assert.equal(p.materialAccordion.classList.contains('has-interacted'), false, 'Initial collapse must not animate after scroll measurements');
   await p.materials[2].button.emit('click');
+  assert.equal(p.materialAccordion.classList.contains('has-interacted'), true, 'User selections still animate');
   assert.deepEqual(expanded(), ['false', 'false', 'true']);
   assert.deepEqual(p.materials.map(({ detail }) => detail.hidden), [true, true, false]);
   await p.materials[2].button.emit('keydown', { key: 'ArrowRight' });

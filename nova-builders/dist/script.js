@@ -338,7 +338,10 @@
   if (materialAccordion) {
     const panels = [...materialAccordion.querySelectorAll('[data-material-panel]')];
     const buttons = panels.map(panel => panel.querySelector('[data-material-toggle]'));
-    const activateMaterial = index => {
+    const activateMaterial = (index, animate = true) => {
+      // The initial mobile collapse must finish before scroll positions are
+      // measured. Enable transitions only for subsequent user interaction.
+      if (animate) materialAccordion.classList.add('has-interacted');
       panels.forEach((panel, i) => {
         panel.classList.toggle('is-active', i === index);
         buttons[i].setAttribute('aria-expanded', String(i === index));
@@ -346,7 +349,7 @@
       });
     };
     materialAccordion.classList.add('is-interactive');
-    activateMaterial(0);
+    activateMaterial(0, false);
     buttons.forEach((button, index) => {
       button.addEventListener('click', () => activateMaterial(index));
       button.addEventListener('focus', () => activateMaterial(index));
@@ -383,7 +386,13 @@
       }
       // Section entrances have one owner below. If its module is unavailable,
       // leave content static instead of starting a second reveal system.
-      const blueprintTimeline = gsap.timeline({ scrollTrigger: { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 } });
+      const phoneBlueprint = window.matchMedia('(max-width: 900px)').matches;
+      const blueprintTimeline = gsap.timeline({ scrollTrigger: phoneBlueprint
+        // On phones, draw during the section's introduction and finish as
+        // the drawing enters view. No delayed scrub after it is onscreen.
+        ? { trigger: '.approach-sticky', start: 'top bottom+=240', endTrigger: '.approach-visual', end: 'top bottom', scrub: true, invalidateOnRefresh: true }
+        : { trigger: '.approach-visual', start: 'top 88%', end: 'bottom 40%', scrub: .6 }
+      });
       document.querySelectorAll('.blueprint-line').forEach((line, index) => {
         const length = line.getTotalLength();
         gsap.set(line, { strokeDasharray: length, strokeDashoffset: length });
