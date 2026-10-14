@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createPreviewServer } from '../serve.mjs';
 
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
-const videoPath = resolve(root, 'assets/nova-construction-scrub.mp4');
+const videoPath = resolve(root, 'assets/nova-construction-v2-scrub.mp4');
 const server = createPreviewServer(root);
 let address;
 before(async () => {
@@ -30,7 +30,7 @@ test('the complete landing page and its local asset references are available', a
 test('video seeking returns exactly the requested bytes, including suffix ranges', async () => {
   const video = await readFile(videoPath);
   for (const [range, expected] of [['bytes=100-163', video.subarray(100, 164)], ['bytes=-64', video.subarray(-64)]]) {
-    const response = await fetch(`${address}/assets/nova-construction-scrub.mp4`, { headers: { Range: range } });
+    const response = await fetch(`${address}/assets/nova-construction-v2-scrub.mp4`, { headers: { Range: range } });
     assert.equal(response.status, 206);
     assert.equal(response.headers.get('content-type'), 'video/mp4');
     assert.equal(response.headers.get('content-length'), '64');
@@ -42,9 +42,9 @@ test('canvas renderer and first/last frame variants are served with correct cont
   const js = await fetch(`${address}/hero-sequence.js`);
   assert.equal(js.status, 200);
   assert.match(js.headers.get('content-type'), /javascript/);
-  for (const variant of ['desktop', 'mobile']) {
-    for (const index of ['000', '293']) {
-      const response = await fetch(`${address}/assets/hero-frames/${variant}/frame-${index}.webp`);
+  for (const variant of ['desktop']) {
+    for (const index of ['000', '191']) {
+      const response = await fetch(`${address}/assets/hero-frames-v2/${variant}/frame-${index}.webp`);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('content-type'), 'image/webp');
       const data = Buffer.from(await response.arrayBuffer());
@@ -58,14 +58,14 @@ test('canvas renderer and first/last frame variants are served with correct cont
 
 test('invalid and multi-part ranges are rejected, rather than downloading the full video', async () => {
   for (const range of ['bytes=999999999-', 'bytes=10-5', 'bytes=0-1,5-6', 'bytes=-0']) {
-    const response = await fetch(`${address}/assets/nova-construction-scrub.mp4`, { headers: { Range: range } });
+    const response = await fetch(`${address}/assets/nova-construction-v2-scrub.mp4`, { headers: { Range: range } });
     assert.equal(response.status, 416, range);
     assert.match(response.headers.get('content-range'), /^bytes \*\//);
   }
 });
 
 test('HEAD requests preserve range metadata without sending media', async () => {
-  const response = await fetch(`${address}/assets/nova-construction-scrub.mp4`, { method: 'HEAD', headers: { Range: 'bytes=0-63' } });
+  const response = await fetch(`${address}/assets/nova-construction-v2-scrub.mp4`, { method: 'HEAD', headers: { Range: 'bytes=0-63' } });
   assert.equal(response.status, 206);
   assert.equal(response.headers.get('content-length'), '64');
   assert.equal((await response.arrayBuffer()).byteLength, 0);
@@ -86,7 +86,7 @@ test('initial HTML keeps heavy media out of the critical load', async () => {
   assert.ok(video);
   assert.match(video[0], /preload="none"/);
   assert.doesNotMatch(video[0], /(?:\s|<)src="/);
-  assert.match(video[0], /data-src="\.\/assets\/nova-construction-scrub\.mp4"/);
+  assert.match(video[0], /data-src="\.\/assets\/nova-construction-v2-scrub\.mp4"/);
   const hero = html.match(/<img class="hero-poster"[^>]*>/)[0];
   const preload = html.match(/<link rel="preload" as="image"[^>]*>/)[0];
   assert.doesNotMatch(hero, /loading="lazy"/);

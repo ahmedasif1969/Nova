@@ -132,7 +132,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   const hero = nodes.get('[data-hero]'); hero.offsetTop = 0; hero.offsetHeight = 3000;
   const video = nodes.get('.hero-video');
   video.readyState = 0; video.duration = 10; video.seeking = false; video.pause = () => {};
-  const videoSource = new Element(); videoSource.dataset.src = './assets/nova-construction-scrub.mp4';
+  const videoSource = new Element(); videoSource.dataset.src = './assets/nova-construction-v2-scrub.mp4';
   nodes.set('source[data-src]', videoSource);
   video.loads = 0; video.load = () => { video.loads++; };
   let currentTime = 0;
@@ -484,7 +484,7 @@ test('the video is requested once, only after scrolling inside the hero', async 
   assert.equal(p.video.loads, 0);
   assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
   p.window.scrollY = 400; await p.window.emit('scroll'); p.flush();
-  assert.equal(p.videoSource.src, './assets/nova-construction-scrub.mp4');
+  assert.equal(p.videoSource.src, './assets/nova-construction-v2-scrub.mp4');
   assert.equal(p.video.preload, 'auto');
   assert.equal(p.video.loads, 1);
   assert.equal(p.nodes.get('.hero-poster').style.opacity, '1', 'Keep cover until frames are decoded');

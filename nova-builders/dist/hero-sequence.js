@@ -12,7 +12,7 @@
     // softens fine building details on high-density phone displays.
     const variant = 'desktop';
     const maxCanvasPixels = lowMemory ? 2000000 : 4000000;
-    const lastFrame = 293;
+    const lastFrame = 191;
     const cache = new Map();
     const pending = new Map();
     let active = false, destroyed = false, started = false;
@@ -93,7 +93,7 @@
         const controller = new AbortController();
         const epoch = generation;
         pending.set(index, controller);
-        const url = `./assets/hero-frames/${variant}/frame-${String(index).padStart(3, '0')}.webp`;
+        const url = `./assets/hero-frames-v2/${variant}/frame-${String(index).padStart(3, '0')}.webp`;
         fetch(url, { signal: controller.signal, cache: 'force-cache' })
           .then(response => {
             if (!response.ok) throw new Error(`Hero frame ${response.status}`);

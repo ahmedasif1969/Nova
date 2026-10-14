@@ -48,7 +48,7 @@ test('sequence is lazy, renders all the way forward and reverse, and stops witho
   p.api.setProgress(0, false); await p.tick();
   assert.equal(p.requests.length, 0);
   p.api.setProgress(1, true); await p.settle();
-  assert.equal(p.api.stats().displayed, 293);
+  assert.equal(p.api.stats().displayed, 191);
   for (let i = 1; i < p.painted.length; i++) assert.ok(p.painted[i] - p.painted[i - 1] <= 4, 'Catch-up draws remain bounded');
   assert.equal(p.canvas.hidden, false);
   const count = p.painted.length;
@@ -105,7 +105,7 @@ test('exact half-frame targets settle from either direction without an idle redr
   const p = fixture({ mobile: true });
   for (const target of [0, .5, 1, .5]) {
     p.api.setProgress(target, true); await p.settle();
-    assert.equal(p.api.stats().displayed, Math.round(target * 293));
+    assert.equal(p.api.stats().displayed, Math.round(target * 191));
     assert.equal(p.frames.size, 0);
   }
   p.api.destroy(); await p.microtasks();
@@ -165,21 +165,24 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
   assert.equal(p.canvas.width, width, 'Do not clear retained pixels without a replacement');
   p.api.setProgress(.3, true); await p.settle();
   assert.equal(p.canvas.width, 1686);
-  assert.equal(p.api.stats().displayed, Math.round(.3 * 293));
+  assert.equal(p.api.stats().displayed, Math.round(.3 * 191));
   p.api.destroy(); await p.microtasks();
 });
 
-test('both sequences contain all 294 real WebP frames and the original MP4 is unchanged', async () => {
+test('active sequence contains all 192 new source frames and the previous original is preserved', async () => {
   const root = new URL('../dist/assets/', import.meta.url);
-  const manifest = JSON.parse(await readFile(new URL('hero-frames/manifest.json', root), 'utf8'));
-  assert.equal(manifest.frameCount, 294);
+  const manifest = JSON.parse(await readFile(new URL('hero-frames-v2/manifest.json', root), 'utf8'));
+  assert.equal(manifest.frameCount, 192);
   assert.equal(manifest.fps, 24);
+  assert.equal(manifest.source, 'nova-construction-v2.mp4');
+  const replacement = await readFile(new URL(manifest.source, root));
+  assert.equal(createHash('sha256').update(replacement).digest('hex'), '9ba8c3aa0a6233cc14924a2cbfb91c3a10411e88112054c0783b9de2ed8b1c08');
   for (const variant of manifest.variants) {
-    const folder = new URL(`hero-frames/${variant.name}/`, root);
+    const folder = new URL(`hero-frames-v2/${variant.name}/`, root);
     const files = (await readdir(folder)).sort();
-    assert.equal(files.length, 294);
+    assert.equal(files.length, 192);
     let total = 0;
-    for (let index = 0; index < 294; index++) {
+    for (let index = 0; index < 192; index++) {
       const name = `frame-${String(index).padStart(3, '0')}.webp`;
       assert.equal(files[index], name);
       const bytes = await readFile(new URL(name, folder));
