@@ -44,7 +44,7 @@ test('canvas renderer and first/last frame variants are served with correct cont
   assert.match(js.headers.get('content-type'), /javascript/);
   for (const variant of ['desktop']) {
     for (const index of ['000', '191']) {
-      const response = await fetch(`${address}/assets/hero-frames-v2/${variant}/frame-${index}.webp`);
+      const response = await fetch(`${address}/assets/hero-frames-v3/${variant}/frame-${index}.webp`);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('content-type'), 'image/webp');
       const data = Buffer.from(await response.arrayBuffer());

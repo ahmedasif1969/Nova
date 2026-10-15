@@ -111,7 +111,7 @@
         if (fetched.has(index) && !wanted.includes(index)) continue;
         const controller = new AbortController(), epoch = generation;
         downloads.set(index, controller);
-        fetch(`./assets/hero-frames-v2/${variant}/frame-${String(index).padStart(3, '0')}.webp`, { signal: controller.signal, cache: 'force-cache' })
+        fetch(`./assets/hero-frames-v3/${variant}/frame-${String(index).padStart(3, '0')}.webp`, { signal: controller.signal, cache: 'force-cache' })
           .then(response => {
             if (!response.ok) throw new Error(`Hero frame ${response.status}`);
             return response.blob();
