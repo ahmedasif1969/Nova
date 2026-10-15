@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/assets');
 const executable = process.argv[2] || 'ffmpeg';
 const source = 'nova-construction-v2.mp4';
-const sequenceFolder = 'hero-frames-v4';
+const sequenceFolder = 'hero-frames-v2';
 const variants = [
-  { name: 'preview', width: 640, height: 360, quality: 60 }
+  { name: 'desktop', width: 1280, height: 720, quality: 90 }
 ];
 const counts = [];
 for (const variant of variants) {
@@ -36,7 +36,6 @@ for (const variant of variants) {
 if (counts[0] !== 192) throw new Error(`Unexpected frame counts: ${counts}`);
 await writeFile(resolve(root, sequenceFolder, 'manifest.json'), JSON.stringify({
   source, frameCount: counts[0], fps: 24,
-  variants, detailFolder: 'hero-frames-v3/desktop',
-  note: 'All 192 source frames in a lightweight motion preview. Native-resolution v3 frames sharpen the paused view. Original media preserved.'
+  variants, note: 'All source frames, lossy WebP quality 90. Original MP4s preserved.'
 }, null, 2) + '\n');
 console.log('Hero sequence generated:', variants);

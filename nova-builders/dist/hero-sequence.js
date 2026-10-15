@@ -11,18 +11,15 @@
     const mobile = window.matchMedia('(max-width: 900px)').matches;
     const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
     const capacity = lowMemory ? 8 : mobile ? 10 : 12;
-    const connection = navigator.connection;
-    const slowNetwork = connection?.saveData || /(^|-)2g$|3g/.test(connection?.effectiveType || '') ||
-      (connection?.downlink > 0 && connection.downlink < 5);
-    const downloadAhead = slowNetwork ? 12 : lowMemory ? 16 : mobile ? 32 : 48;
+    const downloadAhead = lowMemory ? 16 : mobile ? 32 : 48;
     const openingFrames = lowMemory ? 8 : 12;
-    const downloadConcurrency = lowMemory ? 2 : 6;
+    const downloadConcurrency = lowMemory ? 2 : 4;
     const compressedLimit = (lowMemory ? 6 : mobile ? 12 : 16) * 1024 * 1024;
     const compressed = new Map(), downloads = new Map(), failed = new Set(), fetched = new Set();
-    let compressedBytes = 0, downloadWanted = [], warming = false, requiredFrame = 0;
-    // Small motion frames avoid making every scroll step wait for a large
-    // image. Upgrade only the settled view to native resolution.
-    const variant = 'preview';
+    let compressedBytes = 0, downloadWanted = [], warming = false;
+    // Share original-resolution frames across devices. The smaller archive
+    // softens fine building details on high-density phone displays.
+    const variant = 'desktop';
     const maxCanvasPixels = lowMemory ? 2000000 : 4000000;
     const lastFrame = 191;
     const cache = new Map();
@@ -31,50 +28,9 @@
     let target = 0, position = 0, displayed = -1, direction = 1;
     let raf = 0, previousTick = 0, generation = 0, wanted = [];
     let width = 0, height = 0, resizeNeeded = false;
-    let detailTimer = 0, detailController = null, detailBitmap = null, detailIndex = -1, displayedDetail = false, detailBusy = false;
-    function cancelDetail() {
-      if (detailTimer) clearTimeout(detailTimer);
-      detailTimer = 0;
-      detailController?.abort();
-      detailController = null;
-      detailBitmap?.close();
-      detailBitmap = null;
-      detailIndex = -1;
-    }
-    function sharpen() {
-      if (detailTimer || detailBusy || detailIndex === target || target === 0 || connection?.saveData) return;
-      detailTimer = setTimeout(async () => {
-        detailTimer = 0;
-        if (!active || destroyed || document.hidden || displayed !== target) return;
-        const index = target, epoch = generation, controller = new AbortController();
-        detailController = controller;
-        detailBusy = true;
-        let bitmap;
-        try {
-          const response = await fetch(`./assets/hero-frames-v3/desktop/frame-${String(index).padStart(3, '0')}.webp`, {
-            signal: controller.signal, cache: 'force-cache', priority: 'low'
-          });
-          if (!response.ok) return;
-          const blob = await response.blob();
-          if (controller.signal.aborted) return;
-          bitmap = await createImageBitmap(blob);
-          if (controller.signal.aborted || destroyed || !active || document.hidden || epoch !== generation || target !== index || displayed !== index) return;
-          detailBitmap = bitmap;
-          bitmap = null;
-          detailIndex = index;
-          draw(index);
-        } catch { /* Optional detail failure must not interrupt motion. */ }
-        finally {
-          bitmap?.close();
-          detailBusy = false;
-          if (detailController === controller) detailController = null;
-        }
-      }, 180);
-    }
     const bounded = value => Math.max(0, Math.min(lastFrame, value));
     const release = () => {
       generation++;
-      cancelDetail();
       warming = false;
       downloads.forEach(controller => controller.abort());
       pending.forEach(controller => controller.abort());
@@ -87,20 +43,18 @@
       if (active && !destroyed && !raf) raf = requestAnimationFrame(tick);
     };
     function draw(index) {
-      const isDetail = detailIndex === index && !!detailBitmap;
-      const bitmap = isDetail ? detailBitmap : cache.get(index);
+      const bitmap = cache.get(index);
       if (!bitmap) return false;
       if (resizeNeeded) {
         sizeCanvas();
         resizeNeeded = false;
         displayed = -1;
       }
-      if (displayed !== index || displayedDetail !== isDetail) {
+      if (displayed !== index) {
         const scale = Math.max(width / bitmap.width, height / bitmap.height);
         const dw = bitmap.width * scale, dh = bitmap.height * scale;
         context.drawImage(bitmap, (width - dw) / 2, (height - dh) / 2, dw, dh);
         displayed = index;
-        displayedDetail = isDetail;
         canvas.hidden = false;
         onDraw(index / lastFrame, index);
       }
@@ -128,14 +82,13 @@
       draw(old);
     };
     function plan(center) {
-      requiredFrame = center;
       const candidates = [center];
       // Most prefetch is ahead of movement, with enough behind for reversal.
       for (let offset = 1; candidates.length < capacity; offset++) {
         candidates.push(bounded(center + direction * offset));
         if (offset <= 3) candidates.push(bounded(center - direction * offset));
       }
-      wanted = [...new Set(candidates)].slice(0, warming ? openingFrames : capacity);
+      wanted = [...new Set(candidates)].slice(0, capacity);
       const keep = new Set(wanted);
       cache.forEach((bitmap, index) => {
         if (!keep.has(index)) { bitmap.close(); cache.delete(index); }
@@ -144,13 +97,6 @@
       const ahead = Array.from({ length: warming ? openingFrames : downloadAhead }, (_, offset) => bounded(center + direction * offset));
       downloadWanted = [...new Set([...wanted, ...ahead])];
       downloads.forEach((controller, index) => { if (!downloadWanted.includes(index)) controller.abort(); });
-      // A full speculative queue must not block the frame that can unblock
-      // painting. Cancel one speculative request; its finalizer frees the slot.
-      if (!compressed.has(center) && !downloads.has(center) && downloads.size >= downloadConcurrency) {
-        const speculative = [...downloads].reverse().find(([index, controller]) =>
-          index !== center && !controller.signal.aborted);
-        speculative?.[1].abort();
-      }
       pump();
     }
     function download() {
@@ -165,9 +111,7 @@
         if (fetched.has(index) && !wanted.includes(index)) continue;
         const controller = new AbortController(), epoch = generation;
         downloads.set(index, controller);
-        fetch(`./assets/hero-frames-v4/${variant}/frame-${String(index).padStart(3, '0')}.webp`, {
-          signal: controller.signal, cache: 'force-cache', priority: index === requiredFrame ? 'high' : 'low'
-        })
+        fetch(`./assets/hero-frames-v2/${variant}/frame-${String(index).padStart(3, '0')}.webp`, { signal: controller.signal, cache: 'force-cache' })
           .then(response => {
             if (!response.ok) throw new Error(`Hero frame ${response.status}`);
             return response.blob();
@@ -177,19 +121,15 @@
             compressed.set(index, blob);
             fetched.add(index);
             compressedBytes += blob.size || 0;
-            // Keep the small compressed preview for reversal when it fits the
-            // byte budget; decoded pixel buffers still use the short window.
+            // Bound both bytes and item count; retain the imminent decode window.
             for (const [old, value] of compressed) {
-              if (compressedBytes <= compressedLimit && compressed.size <= lastFrame + 1) break;
+              if (compressedBytes <= compressedLimit && compressed.size <= downloadAhead + capacity) break;
               if (wanted.includes(old)) continue;
               compressed.delete(old); compressedBytes -= value.size || 0;
             }
           })
           .catch(() => { if (!controller.signal.aborted && epoch === generation) failed.add(index); })
-          .finally(() => {
-            if (downloads.get(index) === controller) downloads.delete(index);
-            pump();
-          });
+          .finally(() => { downloads.delete(index); pump(); });
       }
     }
     function pump() {
@@ -241,7 +181,6 @@
       if (displayed === Math.round(target)) {
         position = target;
         previousTick = 0;
-        sharpen();
         return;
       }
       schedule();
@@ -260,7 +199,6 @@
         // Target a real frame, so easing cannot stall just below a half-frame
         // rounding boundary while repeatedly scheduling identical drawings.
         const next = Math.round(bounded(progress * lastFrame));
-        if (next !== target) cancelDetail();
         if (Math.abs(next - target) > .001) direction = next > target ? 1 : -1;
         target = next;
         if (!enabled || document.hidden) {
@@ -290,8 +228,7 @@
       // Lightweight diagnostics, containing counts only (not pixel buffers).
       stats: () => ({ capacity, decoded: cache.size, pending: pending.size, displayed, variant,
         downloadAhead, openingFrames, downloadConcurrency, downloading: downloads.size,
-        compressed: compressed.size, compressedBytes, compressedLimit, detailIndex,
-        detailLoading: detailBusy })
+        compressed: compressed.size, compressedBytes, compressedLimit })
     };
     instances.set(canvas, api);
     return api;
