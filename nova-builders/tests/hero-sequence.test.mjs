@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 const source = await readFile(new URL('../dist/hero-sequence.js', import.meta.url), 'utf8');
 function fixture({ bootstrap = false, deferAdoption = false, mobile = false, deviceMemory = 8, slowDecode = false, slowFetch = false, effectiveType = '4g', downlink = 10, saveData = false, blobSize = 200000, fail = false, width = mobile ? 390 : 1440, height = mobile ? 844 : 900, dpr = 3 } = {}) {
   const frames = new Map(), requests = [], bitmaps = [], decodes = [];
+  const timers = new Map();
   const painted = [], errors = [];
   let id = 0, time = 0, live = 0, peak = 0;
   const context = { drawImage(bitmap) { assert.equal(bitmap.closed, false); painted.push(bitmap.index); } };
@@ -18,7 +19,7 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
   }
   const bitmap = blob => {
     live++; peak = Math.max(peak, live);
-    const image = { index: blob.index, width: 1344, height: 768, closed: false,
+    const image = { index: blob.index, width: blob.detail ? 1280 : 640, height: blob.detail ? 720 : 360, detail: blob.detail, closed: false,
       close() { assert.equal(this.closed, false, 'Do not close a buffer twice'); this.closed = true; live--; } };
     bitmaps.push(image); return image;
   };
@@ -35,10 +36,12 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
         request.complete = resolve;
         signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true });
       });
-      return { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize }) };
+      return { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize, detail: url.includes('hero-frames-v3') }) };
     },
     requestAnimationFrame: callback => { frames.set(++id, callback); return id; },
-    cancelAnimationFrame: id => frames.delete(id) });
+    cancelAnimationFrame: id => frames.delete(id),
+    setTimeout: (callback, delay) => { timers.set(++id, { callback, at: time + delay }); return id; },
+    clearTimeout: id => timers.delete(id) });
   const callbacks = [];
   let api;
   const adopt = () => { api = window.NovaHeroSequence({ canvas, onDraw: (p, index) => callbacks.push({ p, index }), onError: error => errors.push(error) }); return api; };
@@ -50,7 +53,12 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
     await microtasks();
   };
   const settle = async () => { for (let i = 0; i < 500; i++) { await tick(); if (!frames.size && !api.stats().pending) return; } throw new Error('Sequence did not settle'); };
-  return { get api() { return api; }, adopt, canvas, context, document, requests, bitmaps, decodes, painted, errors, callbacks, frames, tick, settle, microtasks,
+  const advance = async milliseconds => {
+    time += milliseconds;
+    for (const [id, timer] of [...timers]) if (timer.at <= time) { timers.delete(id); timer.callback(); }
+    await microtasks();
+  };
+  return { get api() { return api; }, adopt, canvas, context, document, requests, bitmaps, decodes, painted, errors, callbacks, frames, tick, settle, microtasks, advance,
     live: () => live, peak: () => peak };
 }
 
@@ -58,12 +66,12 @@ test('early loader downloads before main adoption and reuses the same buffer', a
   const p = fixture({ bootstrap: true, deferAdoption: true });
   await p.tick();
   for (let i = 0; i < 10; i++) await p.microtasks();
-  assert.equal(p.requests.length, 6, 'No main script or window load event needed');
+  assert.equal(p.requests.length, 12, 'No main script or window load event needed');
   assert.equal(p.painted.length, 0);
   const api = p.adopt();
   assert.equal(p.adopt(), api, 'Main must reuse the early instance');
   api.preload(); await p.microtasks();
-  assert.equal(p.requests.length, 6, 'No duplicate opening downloads');
+  assert.equal(p.requests.length, 12, 'No duplicate opening downloads');
   api.setProgress(.1, true); await p.settle();
   assert.ok(p.callbacks.length > 0);
   api.destroy(); await p.microtasks();
@@ -110,7 +118,7 @@ test('decoded cache, decode concurrency and backing store stay bounded on deskto
     assert.ok(p.peak() <= p.api.stats().capacity + 2, 'Include transient decoding buffers in the bound');
     assert.ok(p.canvas.width * p.canvas.height <= (options.deviceMemory === 4 ? 2000000 : 4000000), 'Backing store respects the device pixel budget');
     assert.equal(p.api.stats().capacity, options.deviceMemory === 4 ? 8 : options.mobile ? 10 : 12);
-    assert.ok(p.requests.every(request => request.url.includes('/desktop/')), 'Phones also download the original-resolution frames');
+    assert.ok(p.requests.every(request => request.url.includes('/preview/')), 'Motion never waits for native-resolution detail');
     p.api.destroy(); await p.microtasks();
     assert.equal(p.live(), 0);
   }
@@ -121,7 +129,7 @@ test('opening buffer warms without drawing or downloading the entire clip', asyn
     const p = fixture(options);
     p.api.preload();
     for (let i = 0; i < 30; i++) await p.microtasks();
-    assert.equal(p.requests.length, options.deviceMemory === 4 ? 4 : 6);
+    assert.equal(p.requests.length, options.deviceMemory === 4 ? 8 : 12);
     assert.equal(p.painted.length, 0);
     assert.equal(p.canvas.hidden, true);
     assert.ok(p.api.stats().decoded <= p.api.stats().capacity);
@@ -144,7 +152,7 @@ test('network runs ahead independently of two slow decodes with bounded compress
     for (let i = 0; i < 30; i++) await p.microtasks();
     const stats = p.api.stats();
     assert.equal(stats.downloadAhead, options.deviceMemory === 4 ? 16 : options.mobile ? 32 : 48);
-    assert.equal(stats.downloadConcurrency, options.deviceMemory === 4 ? 2 : 4);
+    assert.equal(stats.downloadConcurrency, options.deviceMemory === 4 ? 2 : 6);
     assert.equal(p.decodes.length, 2);
     assert.ok(p.requests.length >= stats.downloadAhead, 'Downloads continue while decoders are occupied');
     assert.ok(stats.compressedBytes <= stats.compressedLimit);
@@ -153,12 +161,12 @@ test('network runs ahead independently of two slow decodes with bounded compress
   }
 });
 
-test('slow connections limit speculation while retaining native-resolution frames', async () => {
+test('slow connections limit speculation and use lightweight motion frames', async () => {
   for (const options of [{ effectiveType: '3g' }, { effectiveType: 'slow-2g' }, { downlink: 1.5 }]) {
     const p = fixture(options);
     p.api.setProgress(.1, true); await p.settle();
     assert.equal(p.api.stats().downloadAhead, 12);
-    assert.ok(p.requests.every(request => request.url.includes('hero-frames-v3/desktop/')));
+    assert.ok(p.requests.every(request => request.url.includes('hero-frames-v4/preview/')));
     assert.equal(p.api.stats().displayed, 19);
     p.api.destroy(); await p.microtasks();
   }
@@ -173,10 +181,62 @@ test('one ready frame paints while the rest of the cold network buffer is still 
   assert.ok(p.requests.some(request => request.priority === 'low'));
   first.complete(); await p.microtasks(); await p.tick();
   assert.deepEqual(p.painted, [4], 'Do not wait for speculative downloads to paint');
-  assert.equal(p.api.stats().downloading, 4);
+  assert.equal(p.api.stats().downloading, 6);
   p.api.destroy(); await p.microtasks();
   assert.equal(p.errors.length, 0, 'Cancelled speculative requests are not media failures');
   assert.equal(p.live(), 0);
+});
+
+test('paused views sharpen after idle without downloading detail during motion', async () => {
+  const p = fixture();
+  p.api.setProgress(.5, true); await p.settle();
+  assert.ok(p.requests.every(request => request.url.includes('/preview/')));
+  const displayed = p.api.stats().displayed;
+  await p.advance(180);
+  assert.equal(p.api.stats().detailIndex, displayed);
+  assert.equal(p.bitmaps.filter(bitmap => bitmap.detail && !bitmap.closed).length, 1);
+  assert.equal(p.requests.filter(request => request.url.includes('hero-frames-v3')).length, 1);
+  assert.equal(p.painted.at(-1), displayed, 'Sharpen the same source frame without a timeline jump');
+  p.api.setProgress(.8, true);
+  assert.equal(p.api.stats().detailIndex, -1);
+  assert.equal(p.bitmaps.filter(bitmap => bitmap.detail && !bitmap.closed).length, 0);
+  await p.settle();
+  p.api.destroy(); await p.advance(500);
+  assert.equal(p.live(), 0);
+});
+
+test('late detail decode cannot replace a newer scroll position or resurrect hidden work', async () => {
+  const p = fixture({ slowDecode: true });
+  p.api.setProgress(.3, true);
+  for (let i = 0; i < 100; i++) {
+    p.decodes.splice(0).forEach(complete => complete());
+    await p.microtasks(); await p.tick();
+  }
+  p.decodes.splice(0).forEach(complete => complete()); await p.microtasks();
+  assert.equal(p.api.stats().displayed, Math.round(.3 * 191));
+  await p.advance(180);
+  assert.equal(p.decodes.length, 1, 'Hold the optional native-resolution decode in flight');
+  const lateDetail = p.decodes.splice(0);
+  const painted = p.painted.length;
+  p.api.setProgress(.6, true);
+  lateDetail.forEach(complete => complete()); await p.microtasks();
+  assert.equal(p.painted.length, painted, 'An obsolete detail completion must never paint');
+  assert.equal(p.api.stats().detailIndex, -1);
+  p.api.destroy();
+  p.decodes.splice(0).forEach(complete => complete()); await p.microtasks();
+  assert.equal(p.live(), 0);
+});
+
+test('data saver and offscreen states never trigger optional detail downloads', async () => {
+  for (const options of [{}, { saveData: true }]) {
+    const p = fixture(options);
+    p.api.setProgress(.5, true); await p.settle();
+    if (!options.saveData) p.api.setProgress(.5, false);
+    await p.advance(500);
+    assert.ok(p.requests.every(request => request.url.includes('/preview/')));
+    p.api.destroy(); await p.microtasks();
+    assert.equal(p.live(), 0);
+  }
 });
 
 test('scroll reversal cancels obsolete cold downloads and gives the required frame priority', async () => {
@@ -300,17 +360,17 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
 
 test('active sequence contains all 192 new source frames and the previous original is preserved', async () => {
   const root = new URL('../dist/assets/', import.meta.url);
-  const manifest = JSON.parse(await readFile(new URL('hero-frames-v3/manifest.json', root), 'utf8'));
+  const manifest = JSON.parse(await readFile(new URL('hero-frames-v4/manifest.json', root), 'utf8'));
   assert.equal(manifest.frameCount, 192);
   assert.equal(manifest.fps, 24);
   assert.equal(manifest.source, 'nova-construction-v2.mp4');
   const replacement = await readFile(new URL(manifest.source, root));
   assert.equal(createHash('sha256').update(replacement).digest('hex'), '9ba8c3aa0a6233cc14924a2cbfb91c3a10411e88112054c0783b9de2ed8b1c08');
   for (const variant of manifest.variants) {
-    assert.equal(variant.width, 1280);
-    assert.equal(variant.height, 720);
-    assert.equal(variant.quality, 75);
-    const folder = new URL(`hero-frames-v3/${variant.name}/`, root);
+    assert.equal(variant.width, 640);
+    assert.equal(variant.height, 360);
+    assert.equal(variant.quality, 60);
+    const folder = new URL(`hero-frames-v4/${variant.name}/`, root);
     const files = (await readdir(folder)).sort();
     assert.equal(files.length, 192);
     let total = 0;
@@ -326,11 +386,11 @@ test('active sequence contains all 192 new source frames and the previous origin
       total += (await stat(new URL(name, folder))).size;
     }
     assert.equal(total, variant.bytes);
-    const previous = JSON.parse(await readFile(new URL('hero-frames-v2/manifest.json', root), 'utf8'));
-    assert.ok(total < previous.variants[0].bytes * .6, 'At least 40% less transfer without dropping source frames');
-    const openingBytes = async (version, count) => (await Promise.all(Array.from({ length: count }, (_, index) =>
-      stat(new URL(`hero-frames-${version}/desktop/frame-${String(index).padStart(3, '0')}.webp`, root))))).reduce((sum, file) => sum + file.size, 0);
-    assert.ok(await openingBytes('v3', 6) < await openingBytes('v2', 12) * .35, 'Opening transfer is at least 65% smaller');
+    const previous = JSON.parse(await readFile(new URL('hero-frames-v3/manifest.json', root), 'utf8'));
+    assert.ok(total < previous.variants[0].bytes * .3, 'At least 70% less motion transfer than the shipped v3 fix');
+    const openingBytes = async (version, variant, count) => (await Promise.all(Array.from({ length: count }, (_, index) =>
+      stat(new URL(`hero-frames-${version}/${variant}/frame-${String(index).padStart(3, '0')}.webp`, root))))).reduce((sum, file) => sum + file.size, 0);
+    assert.ok(await openingBytes('v4', 'preview', 12) < await openingBytes('v3', 'desktop', 6) * .6, 'Twice the opening frames in at least 40% fewer bytes than v3');
   }
   const original = await readFile(new URL('nova-construction.mp4', root));
   assert.equal(createHash('sha256').update(original).digest('hex'), '9e22851da39ac9eaca20594f562a1f5dc17d536d25c230b8be81d6436db6ada1');

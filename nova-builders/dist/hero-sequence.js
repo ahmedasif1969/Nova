@@ -15,14 +15,14 @@
     const slowNetwork = connection?.saveData || /(^|-)2g$|3g/.test(connection?.effectiveType || '') ||
       (connection?.downlink > 0 && connection.downlink < 5);
     const downloadAhead = slowNetwork ? 12 : lowMemory ? 16 : mobile ? 32 : 48;
-    const openingFrames = lowMemory ? 4 : 6;
-    const downloadConcurrency = lowMemory ? 2 : 4;
+    const openingFrames = lowMemory ? 8 : 12;
+    const downloadConcurrency = lowMemory ? 2 : 6;
     const compressedLimit = (lowMemory ? 6 : mobile ? 12 : 16) * 1024 * 1024;
     const compressed = new Map(), downloads = new Map(), failed = new Set(), fetched = new Set();
     let compressedBytes = 0, downloadWanted = [], warming = false, requiredFrame = 0;
-    // Share original-resolution frames across devices. The smaller archive
-    // softens fine building details on high-density phone displays.
-    const variant = 'desktop';
+    // Small motion frames avoid making every scroll step wait for a large
+    // image. Upgrade only the settled view to native resolution.
+    const variant = 'preview';
     const maxCanvasPixels = lowMemory ? 2000000 : 4000000;
     const lastFrame = 191;
     const cache = new Map();
@@ -31,9 +31,50 @@
     let target = 0, position = 0, displayed = -1, direction = 1;
     let raf = 0, previousTick = 0, generation = 0, wanted = [];
     let width = 0, height = 0, resizeNeeded = false;
+    let detailTimer = 0, detailController = null, detailBitmap = null, detailIndex = -1, displayedDetail = false, detailBusy = false;
+    function cancelDetail() {
+      if (detailTimer) clearTimeout(detailTimer);
+      detailTimer = 0;
+      detailController?.abort();
+      detailController = null;
+      detailBitmap?.close();
+      detailBitmap = null;
+      detailIndex = -1;
+    }
+    function sharpen() {
+      if (detailTimer || detailBusy || detailIndex === target || target === 0 || connection?.saveData) return;
+      detailTimer = setTimeout(async () => {
+        detailTimer = 0;
+        if (!active || destroyed || document.hidden || displayed !== target) return;
+        const index = target, epoch = generation, controller = new AbortController();
+        detailController = controller;
+        detailBusy = true;
+        let bitmap;
+        try {
+          const response = await fetch(`./assets/hero-frames-v3/desktop/frame-${String(index).padStart(3, '0')}.webp`, {
+            signal: controller.signal, cache: 'force-cache', priority: 'low'
+          });
+          if (!response.ok) return;
+          const blob = await response.blob();
+          if (controller.signal.aborted) return;
+          bitmap = await createImageBitmap(blob);
+          if (controller.signal.aborted || destroyed || !active || document.hidden || epoch !== generation || target !== index || displayed !== index) return;
+          detailBitmap = bitmap;
+          bitmap = null;
+          detailIndex = index;
+          draw(index);
+        } catch { /* Optional detail failure must not interrupt motion. */ }
+        finally {
+          bitmap?.close();
+          detailBusy = false;
+          if (detailController === controller) detailController = null;
+        }
+      }, 180);
+    }
     const bounded = value => Math.max(0, Math.min(lastFrame, value));
     const release = () => {
       generation++;
+      cancelDetail();
       warming = false;
       downloads.forEach(controller => controller.abort());
       pending.forEach(controller => controller.abort());
@@ -46,18 +87,20 @@
       if (active && !destroyed && !raf) raf = requestAnimationFrame(tick);
     };
     function draw(index) {
-      const bitmap = cache.get(index);
+      const isDetail = detailIndex === index && !!detailBitmap;
+      const bitmap = isDetail ? detailBitmap : cache.get(index);
       if (!bitmap) return false;
       if (resizeNeeded) {
         sizeCanvas();
         resizeNeeded = false;
         displayed = -1;
       }
-      if (displayed !== index) {
+      if (displayed !== index || displayedDetail !== isDetail) {
         const scale = Math.max(width / bitmap.width, height / bitmap.height);
         const dw = bitmap.width * scale, dh = bitmap.height * scale;
         context.drawImage(bitmap, (width - dw) / 2, (height - dh) / 2, dw, dh);
         displayed = index;
+        displayedDetail = isDetail;
         canvas.hidden = false;
         onDraw(index / lastFrame, index);
       }
@@ -122,7 +165,7 @@
         if (fetched.has(index) && !wanted.includes(index)) continue;
         const controller = new AbortController(), epoch = generation;
         downloads.set(index, controller);
-        fetch(`./assets/hero-frames-v3/${variant}/frame-${String(index).padStart(3, '0')}.webp`, {
+        fetch(`./assets/hero-frames-v4/${variant}/frame-${String(index).padStart(3, '0')}.webp`, {
           signal: controller.signal, cache: 'force-cache', priority: index === requiredFrame ? 'high' : 'low'
         })
           .then(response => {
@@ -134,9 +177,10 @@
             compressed.set(index, blob);
             fetched.add(index);
             compressedBytes += blob.size || 0;
-            // Bound both bytes and item count; retain the imminent decode window.
+            // Keep the small compressed preview for reversal when it fits the
+            // byte budget; decoded pixel buffers still use the short window.
             for (const [old, value] of compressed) {
-              if (compressedBytes <= compressedLimit && compressed.size <= downloadAhead + capacity) break;
+              if (compressedBytes <= compressedLimit && compressed.size <= lastFrame + 1) break;
               if (wanted.includes(old)) continue;
               compressed.delete(old); compressedBytes -= value.size || 0;
             }
@@ -197,6 +241,7 @@
       if (displayed === Math.round(target)) {
         position = target;
         previousTick = 0;
+        sharpen();
         return;
       }
       schedule();
@@ -215,6 +260,7 @@
         // Target a real frame, so easing cannot stall just below a half-frame
         // rounding boundary while repeatedly scheduling identical drawings.
         const next = Math.round(bounded(progress * lastFrame));
+        if (next !== target) cancelDetail();
         if (Math.abs(next - target) > .001) direction = next > target ? 1 : -1;
         target = next;
         if (!enabled || document.hidden) {
@@ -244,7 +290,8 @@
       // Lightweight diagnostics, containing counts only (not pixel buffers).
       stats: () => ({ capacity, decoded: cache.size, pending: pending.size, displayed, variant,
         downloadAhead, openingFrames, downloadConcurrency, downloading: downloads.size,
-        compressed: compressed.size, compressedBytes, compressedLimit })
+        compressed: compressed.size, compressedBytes, compressedLimit, detailIndex,
+        detailLoading: detailBusy })
     };
     instances.set(canvas, api);
     return api;
