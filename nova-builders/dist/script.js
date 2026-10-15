@@ -127,7 +127,9 @@
   const syncHeroPoster = () => {
     if (!(heroSequence ? sequenceReady : videoReady) || reducedMotion) posterOpacity = 1;
     else {
-      const requestedOpacity = 1 - clamp(((heroSequence ? displayedHeroProgress : heroProgress) - .035) / .13);
+      // Once a real frame is ready, uncover it based on the user's scroll,
+      // not on how many slow-to-download frames have already been painted.
+      const requestedOpacity = 1 - clamp((heroProgress - .035) / .13);
       const rewindComplete = heroSequence
         ? heroProgress <= .035 && sequenceFrame === 0
         : targetVideoTime < frameDuration * .5 && displayedVideoFrame === 0 && !video.seeking && !awaitingFrame;
@@ -250,7 +252,10 @@
     progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
     header.classList.toggle('scrolled', y > 80);
     if (!heroSequence) paintHeroCopy(p);
-    else if (!sequenceReady) paintHeroCopy(0);
+    else if (!sequenceReady) {
+      paintHeroCopy(0);
+      if (p > .035 && heroActive) buildPhase.textContent = 'Loading construction…';
+    }
     if (!reducedMotion) {
       // Playback starts on scroll; opening-frame warming is scheduled separately.
       // Direct visits to other sections do not start hero downloads.
@@ -333,13 +338,13 @@
   }
   updateScroll();
 
-  // Let first-paint assets finish, then warm only the opening hero buffer.
-  // Direct section visits, reduced motion and data-saver do not prefetch.
-  const warmHero = () => setTimeout(() => {
+  // The early module normally owns warm-up. This idempotent fallback handles
+  // the cover completing after main initialization, without a window.load gate.
+  const warmHero = () => requestAnimationFrame(() => {
     if (!reducedMotion && heroActive && !sequenceStarted && !document.hidden) heroSequence?.preload?.();
-  }, 250);
-  if (document.readyState === 'complete') warmHero();
-  else window.addEventListener('load', warmHero, { once: true });
+  });
+  if (heroPoster.complete && heroPoster.naturalWidth > 0) warmHero();
+  else heroPoster.addEventListener('load', warmHero, { once: true });
 
   // Material chapters work independently of the animation CDN. A single open
   // panel, native buttons and arrow navigation support touch and keyboard use.

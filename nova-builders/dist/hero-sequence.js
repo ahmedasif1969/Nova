@@ -1,7 +1,10 @@
 /* A bounded, lazy image sequence. No MP4 seeks on the primary rendering path. */
 (function () {
   'use strict';
+  const instances = new WeakMap();
   window.NovaHeroSequence = function ({ canvas, onDraw, onError }) {
+    const existing = canvas && instances.get(canvas);
+    if (existing) { existing.attach(onDraw, onError); return existing; }
     if (!canvas || !window.createImageBitmap || !window.AbortController) return null;
     const context = canvas.getContext('2d', { alpha: false });
     if (!context) return null;
@@ -183,8 +186,12 @@
       schedule();
     }
     const api = {
+      attach(drawCallback, errorCallback) { onDraw = drawCallback; onError = errorCallback; },
+      suspendPreload() {
+        if (!active && warming) release();
+      },
       preload() {
-        if (destroyed || active || document.hidden || navigator.connection?.saveData) return;
+        if (destroyed || active || warming || document.hidden || navigator.connection?.saveData) return;
         warming = true;
         plan(0);
       },
@@ -216,12 +223,35 @@
         release();
         compressed.clear(); compressedBytes = 0;
         canvas.hidden = true;
+        instances.delete(canvas);
       },
       // Lightweight diagnostics, containing counts only (not pixel buffers).
       stats: () => ({ capacity, decoded: cache.size, pending: pending.size, displayed, variant,
         downloadAhead, openingFrames, downloadConcurrency, downloading: downloads.size,
         compressed: compressed.size, compressedBytes, compressedLimit })
     };
+    instances.set(canvas, api);
     return api;
   };
+
+  // This local module runs BEFORE third-party animation scripts. Prepare the
+  // opening buffer after the cover can paint, without waiting for window.load.
+  // Main initialization adopts this exact instance (no duplicate downloads).
+  const poster = document.querySelector?.('.hero-poster');
+  const canvas = document.querySelector?.('.hero-canvas');
+  if (!poster || !canvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let earlySequence = null;
+  const start = () => requestAnimationFrame(() => {
+    if (document.hidden || window.scrollY > window.innerHeight ||
+        (window.location.hash && !['#top', '#main-content'].includes(window.location.hash))) return;
+    earlySequence = instances.get(canvas) || window.NovaHeroSequence({ canvas, onDraw() {}, onError() {} });
+    earlySequence?.preload();
+  });
+  if (poster.complete && poster.naturalWidth > 0) start();
+  else poster.addEventListener('load', start, { once: true });
+  const suspend = () => {
+    if (document.hidden || window.scrollY > window.innerHeight) earlySequence?.suspendPreload();
+  };
+  window.addEventListener('scroll', suspend, { passive: true });
+  document.addEventListener('visibilitychange', suspend);
 })();

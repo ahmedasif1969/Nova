@@ -5,13 +5,17 @@ import { runInNewContext } from 'node:vm';
 import { createHash } from 'node:crypto';
 
 const source = await readFile(new URL('../dist/hero-sequence.js', import.meta.url), 'utf8');
-function fixture({ mobile = false, deviceMemory = 8, slowDecode = false, saveData = false, blobSize = 200000, fail = false, width = mobile ? 390 : 1440, height = mobile ? 844 : 900, dpr = 3 } = {}) {
+function fixture({ bootstrap = false, deferAdoption = false, mobile = false, deviceMemory = 8, slowDecode = false, saveData = false, blobSize = 200000, fail = false, width = mobile ? 390 : 1440, height = mobile ? 844 : 900, dpr = 3 } = {}) {
   const frames = new Map(), requests = [], bitmaps = [], decodes = [];
   const painted = [], errors = [];
   let id = 0, time = 0, live = 0, peak = 0;
   const context = { drawImage(bitmap) { assert.equal(bitmap.closed, false); painted.push(bitmap.index); } };
   const canvas = { hidden: true, clientWidth: width, clientHeight: height, getContext: () => context };
   const document = { hidden: false };
+  if (bootstrap) {
+    document.querySelector = selector => selector === '.hero-canvas' ? canvas : { complete: true, naturalWidth: 1280 };
+    document.addEventListener = () => {};
+  }
   const bitmap = blob => {
     live++; peak = Math.max(peak, live);
     const image = { index: blob.index, width: 1344, height: 768, closed: false,
@@ -20,7 +24,8 @@ function fixture({ mobile = false, deviceMemory = 8, slowDecode = false, saveDat
   };
   const decode = blob => slowDecode ? new Promise(resolve => decodes.push(() => resolve(bitmap(blob)))) : Promise.resolve(bitmap(blob));
   const window = { createImageBitmap: decode, AbortController, devicePixelRatio: dpr, innerWidth: width, innerHeight: height,
-    matchMedia: () => ({ matches: mobile }) };
+    scrollY: 0, location: { hash: '' }, addEventListener() {},
+    matchMedia: query => ({ matches: query.includes('max-width') && mobile }) };
   runInNewContext(source, { window, document, navigator: { deviceMemory, connection: { saveData } }, AbortController, DOMException, Promise,
     createImageBitmap: decode,
     fetch: async (url, { signal }) => {
@@ -30,7 +35,9 @@ function fixture({ mobile = false, deviceMemory = 8, slowDecode = false, saveDat
     requestAnimationFrame: callback => { frames.set(++id, callback); return id; },
     cancelAnimationFrame: id => frames.delete(id) });
   const callbacks = [];
-  const api = window.NovaHeroSequence({ canvas, onDraw: (p, index) => callbacks.push({ p, index }), onError: error => errors.push(error) });
+  let api;
+  const adopt = () => { api = window.NovaHeroSequence({ canvas, onDraw: (p, index) => callbacks.push({ p, index }), onError: error => errors.push(error) }); return api; };
+  if (!deferAdoption) adopt();
   const microtasks = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
   const tick = async () => {
     time += 1000 / 60;
@@ -38,9 +45,32 @@ function fixture({ mobile = false, deviceMemory = 8, slowDecode = false, saveDat
     await microtasks();
   };
   const settle = async () => { for (let i = 0; i < 500; i++) { await tick(); if (!frames.size && !api.stats().pending) return; } throw new Error('Sequence did not settle'); };
-  return { api, canvas, context, document, requests, bitmaps, decodes, painted, errors, callbacks, frames, tick, settle, microtasks,
+  return { get api() { return api; }, adopt, canvas, context, document, requests, bitmaps, decodes, painted, errors, callbacks, frames, tick, settle, microtasks,
     live: () => live, peak: () => peak };
 }
+
+test('early loader downloads before main adoption and reuses the same buffer', async () => {
+  const p = fixture({ bootstrap: true, deferAdoption: true });
+  await p.tick();
+  for (let i = 0; i < 10; i++) await p.microtasks();
+  assert.equal(p.requests.length, 12, 'No main script or window load event needed');
+  assert.equal(p.painted.length, 0);
+  const api = p.adopt();
+  assert.equal(p.adopt(), api, 'Main must reuse the early instance');
+  api.preload(); await p.microtasks();
+  assert.equal(p.requests.length, 12, 'No duplicate opening downloads');
+  api.setProgress(.1, true); await p.settle();
+  assert.ok(p.callbacks.length > 0);
+  api.destroy(); await p.microtasks();
+});
+
+test('late warm-up cannot overwrite callbacks already attached by main', async () => {
+  const p = fixture({ bootstrap: true });
+  await p.tick();
+  p.api.setProgress(.1, true); await p.settle();
+  assert.ok(p.callbacks.length > 0, 'Poster and copy callbacks must survive bootstrap racing main');
+  p.api.destroy(); await p.microtasks();
+});
 
 test('sequence is lazy, renders all the way forward and reverse, and stops without a final jump', async () => {
   const p = fixture();

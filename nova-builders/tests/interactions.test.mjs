@@ -227,18 +227,26 @@ test('canvas is primary, copy follows painted frames and the poster cannot cover
   assert.equal(p.sequenceCalls.at(-1).active, false);
 });
 
-test('opening buffer starts after page load only for a visible, unstarted hero', async () => {
+test('opening buffer starts after the cover loads without waiting for page load', async () => {
   const p = pageFixture({ sequenceLibrary: true });
   assert.ok(!p.sequenceCalls.some(call => call.preload));
-  await p.window.emit('load'); p.advance(249);
-  assert.ok(!p.sequenceCalls.some(call => call.preload));
-  p.advance(1);
+  await p.nodes.get('.hero-poster').emit('load'); p.flush();
   assert.equal(p.sequenceCalls.filter(call => call.preload).length, 1);
   for (const options of [{ initialScroll: 5000 }, { reducedMotion: true }, { initialScroll: 400 }]) {
     const quiet = pageFixture({ ...options, sequenceLibrary: true });
-    await quiet.window.emit('load'); quiet.advance(250);
+    await quiet.nodes.get('.hero-poster').emit('load'); quiet.flush();
     assert.ok(!quiet.sequenceCalls.some(call => call.preload));
   }
+});
+
+test('cold first frame uncovers construction without waiting for 26 painted frames', async () => {
+  const p = pageFixture({ sequenceLibrary: true });
+  p.window.scrollY = 800; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.nodes.get('[data-build-phase]').textContent, 'Loading construction…');
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+  p.sequenceCallbacks.onDraw(1 / 191, 1);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0');
+  assert.equal(p.nodes.get('[data-build-phase]').textContent, 'The vision');
 });
 
 test('canvas failure enables the preserved MP4, and direct jumps/reduced motion remain lazy', async () => {
