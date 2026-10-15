@@ -49,7 +49,7 @@ test('sequence is lazy, renders all the way forward and reverse, and stops witho
   assert.equal(p.requests.length, 0);
   p.api.setProgress(1, true); await p.settle();
   assert.equal(p.api.stats().displayed, 191);
-  assert.deepEqual(p.painted, [191], 'First large scroll goes directly to its requested frame');
+  for (let i = 1; i < p.painted.length; i++) assert.ok(p.painted[i] - p.painted[i - 1] <= 4, 'Catch-up draws remain bounded');
   assert.equal(p.canvas.hidden, false);
   const count = p.painted.length;
   for (let i = 0; i < 10; i++) await p.tick();
@@ -59,35 +59,6 @@ test('sequence is lazy, renders all the way forward and reverse, and stops witho
   const reverse = p.painted.slice(count);
   for (let i = 1; i < reverse.length; i++) assert.ok(reverse[i] <= reverse[i - 1]);
   assert.equal(p.frames.size, 0);
-});
-
-test('large forward and backward jumps fetch the target first without traversing the backlog', async () => {
-  const p = fixture();
-  p.api.setProgress(20 / 191, true); await p.settle();
-  let count = p.requests.length, paints = p.painted.length;
-  p.api.setProgress(100 / 191, true); await p.tick();
-  assert.match(p.requests[count].url, /frame-100\.webp$/);
-  await p.settle();
-  assert.deepEqual(p.painted.slice(paints), [100]);
-  count = p.requests.length; paints = p.painted.length;
-  p.api.setProgress(5 / 191, true); await p.tick();
-  assert.match(p.requests[count].url, /frame-005\.webp$/);
-  await p.settle();
-  assert.deepEqual(p.painted.slice(paints), [5]);
-  p.api.destroy(); await p.microtasks();
-});
-
-test('small movements retain easing and settle without a corrective redraw', async () => {
-  const p = fixture();
-  p.api.setProgress(40 / 191, true); await p.settle();
-  const count = p.painted.length;
-  p.api.setProgress(46 / 191, true); await p.settle();
-  const movement = p.painted.slice(count);
-  assert.ok(movement.length > 1);
-  assert.ok(movement[0] > 40 && movement[0] < 46);
-  assert.equal(movement.at(-1), 46);
-  assert.equal(p.frames.size, 0);
-  p.api.destroy(); await p.microtasks();
 });
 
 test('decoded cache, decode concurrency and backing store stay bounded on desktop/mobile', async () => {

@@ -168,11 +168,7 @@
       previousTick = now;
       const gap = target - position;
       const step = Math.max(-4, Math.min(4, gap * (1 - Math.exp(-elapsed / 100))));
-      // Large jumps must not wait through a chain of obsolete intermediate
-      // frames. Recenter download/decode priority on the current scroll target.
-      // Keep the existing easing only when already within eight source frames.
-      const catchUp = displayed < 0 || Math.abs(gap) > 8;
-      const nextPosition = catchUp ? target : bounded(position + step);
+      const nextPosition = bounded(position + step);
       const next = Math.round(nextPosition);
       plan(next);
       // Never advance the virtual timeline while its frame is missing. Last
