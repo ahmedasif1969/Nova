@@ -8,6 +8,12 @@
     const mobile = window.matchMedia('(max-width: 900px)').matches;
     const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
     const capacity = lowMemory ? 8 : mobile ? 10 : 12;
+    const downloadAhead = lowMemory ? 16 : mobile ? 32 : 48;
+    const openingFrames = lowMemory ? 8 : 12;
+    const downloadConcurrency = lowMemory ? 2 : 4;
+    const compressedLimit = (lowMemory ? 6 : mobile ? 12 : 16) * 1024 * 1024;
+    const compressed = new Map(), downloads = new Map(), failed = new Set(), fetched = new Set();
+    let compressedBytes = 0, downloadWanted = [], warming = false;
     // Share original-resolution frames across devices. The smaller archive
     // softens fine building details on high-density phone displays.
     const variant = 'desktop';
@@ -22,6 +28,8 @@
     const bounded = value => Math.max(0, Math.min(lastFrame, value));
     const release = () => {
       generation++;
+      warming = false;
+      downloads.forEach(controller => controller.abort());
       pending.forEach(controller => controller.abort());
       cache.forEach(bitmap => bitmap.close());
       cache.clear();
@@ -83,28 +91,62 @@
         if (!keep.has(index)) { bitmap.close(); cache.delete(index); }
       });
       pending.forEach((controller, index) => { if (!keep.has(index)) controller.abort(); });
+      const ahead = Array.from({ length: warming ? openingFrames : downloadAhead }, (_, offset) => bounded(center + direction * offset));
+      downloadWanted = [...new Set([...wanted, ...ahead])];
+      downloads.forEach((controller, index) => { if (!downloadWanted.includes(index)) controller.abort(); });
       pump();
     }
-    function pump() {
-      if (!active || destroyed) return;
-      for (const index of wanted) {
-        if (pending.size >= 2) break;
-        if (cache.has(index) || pending.has(index)) continue;
-        const controller = new AbortController();
-        const epoch = generation;
-        pending.set(index, controller);
-        const url = `./assets/hero-frames-v2/${variant}/frame-${String(index).padStart(3, '0')}.webp`;
-        fetch(url, { signal: controller.signal, cache: 'force-cache' })
+    function download() {
+      if ((!active && !warming) || destroyed) return;
+      // Decoding and downloading have independent limits. Network can run ahead
+      // without allocating a full pixel buffer for every downloaded image.
+      for (const index of downloadWanted) {
+        if (downloads.size >= downloadConcurrency) break;
+        if (compressed.has(index) || downloads.has(index) || failed.has(index)) continue;
+        // An evicted speculative frame must not create a refetch/evict loop.
+        // Fetch it again only when it becomes part of the immediate window.
+        if (fetched.has(index) && !wanted.includes(index)) continue;
+        const controller = new AbortController(), epoch = generation;
+        downloads.set(index, controller);
+        fetch(`./assets/hero-frames-v2/${variant}/frame-${String(index).padStart(3, '0')}.webp`, { signal: controller.signal, cache: 'force-cache' })
           .then(response => {
             if (!response.ok) throw new Error(`Hero frame ${response.status}`);
             return response.blob();
           })
           .then(blob => {
+            if (destroyed || controller.signal.aborted || epoch !== generation) return;
+            compressed.set(index, blob);
+            fetched.add(index);
+            compressedBytes += blob.size || 0;
+            // Bound both bytes and item count; retain the imminent decode window.
+            for (const [old, value] of compressed) {
+              if (compressedBytes <= compressedLimit && compressed.size <= downloadAhead + capacity) break;
+              if (wanted.includes(old)) continue;
+              compressed.delete(old); compressedBytes -= value.size || 0;
+            }
+          })
+          .catch(() => { if (!controller.signal.aborted && epoch === generation) failed.add(index); })
+          .finally(() => { downloads.delete(index); pump(); });
+      }
+    }
+    function pump() {
+      if ((!active && !warming) || destroyed) return;
+      download();
+      for (const index of wanted) {
+        if (pending.size >= 2) break;
+        if (cache.has(index) || pending.has(index)) continue;
+        if (failed.has(index)) { api.destroy(); onError(new Error(`Hero frame ${index} unavailable`)); return; }
+        if (!compressed.has(index)) continue;
+        const controller = new AbortController();
+        const epoch = generation;
+        pending.set(index, controller);
+        Promise.resolve(compressed.get(index))
+          .then(blob => {
             if (controller.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
             return createImageBitmap(blob);
           })
           .then(bitmap => {
-            if (destroyed || !active || controller.signal.aborted || epoch !== generation || !wanted.includes(index)) bitmap.close();
+            if (destroyed || (!active && !warming) || controller.signal.aborted || epoch !== generation || !wanted.includes(index)) bitmap.close();
             else {
               cache.set(index, bitmap);
               schedule();
@@ -141,6 +183,11 @@
       schedule();
     }
     const api = {
+      preload() {
+        if (destroyed || active || document.hidden || navigator.connection?.saveData) return;
+        warming = true;
+        plan(0);
+      },
       setProgress(progress, enabled) {
         // Target a real frame, so easing cannot stall just below a half-frame
         // rounding boundary while repeatedly scheduling identical drawings.
@@ -148,13 +195,15 @@
         if (Math.abs(next - target) > .001) direction = next > target ? 1 : -1;
         target = next;
         if (!enabled || document.hidden) {
+          if (warming && next === 0 && !document.hidden) return;
           if (raf) cancelAnimationFrame(raf);
           raf = previousTick = 0;
           active = false;
-          if (cache.size || pending.size) release();
+          if (cache.size || pending.size || downloads.size || warming) release();
           return;
         }
         active = true;
+        warming = false;
         if (!started) { started = true; resize(); }
         schedule();
       },
@@ -165,10 +214,13 @@
         if (raf) cancelAnimationFrame(raf);
         raf = 0;
         release();
+        compressed.clear(); compressedBytes = 0;
         canvas.hidden = true;
       },
       // Lightweight diagnostics, containing counts only (not pixel buffers).
-      stats: () => ({ capacity, decoded: cache.size, pending: pending.size, displayed, variant })
+      stats: () => ({ capacity, decoded: cache.size, pending: pending.size, displayed, variant,
+        downloadAhead, openingFrames, downloadConcurrency, downloading: downloads.size,
+        compressed: compressed.size, compressedBytes, compressedLimit })
     };
     return api;
   };

@@ -74,7 +74,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   if (sequenceLibrary) {
     window.NovaHeroSequence = options => {
       sequenceCallbacks = options;
-      return { setProgress(p, active) { sequenceCalls.push({ p, active }); }, resize() {} };
+      return { setProgress(p, active) { sequenceCalls.push({ p, active }); }, preload() { sequenceCalls.push({ preload: true }); }, resize() {} };
     };
   }
   const matchesMedia = query => {
@@ -225,6 +225,20 @@ test('canvas is primary, copy follows painted frames and the poster cannot cover
   assert.equal(p.nodes.get('.hero-copy').style.opacity, '1');
   p.window.scrollY = 5000; await p.window.emit('scroll'); p.flush();
   assert.equal(p.sequenceCalls.at(-1).active, false);
+});
+
+test('opening buffer starts after page load only for a visible, unstarted hero', async () => {
+  const p = pageFixture({ sequenceLibrary: true });
+  assert.ok(!p.sequenceCalls.some(call => call.preload));
+  await p.window.emit('load'); p.advance(249);
+  assert.ok(!p.sequenceCalls.some(call => call.preload));
+  p.advance(1);
+  assert.equal(p.sequenceCalls.filter(call => call.preload).length, 1);
+  for (const options of [{ initialScroll: 5000 }, { reducedMotion: true }, { initialScroll: 400 }]) {
+    const quiet = pageFixture({ ...options, sequenceLibrary: true });
+    await quiet.window.emit('load'); quiet.advance(250);
+    assert.ok(!quiet.sequenceCalls.some(call => call.preload));
+  }
 });
 
 test('canvas failure enables the preserved MP4, and direct jumps/reduced motion remain lazy', async () => {

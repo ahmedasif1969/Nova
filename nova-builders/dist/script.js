@@ -252,8 +252,8 @@
     if (!heroSequence) paintHeroCopy(p);
     else if (!sequenceReady) paintHeroCopy(0);
     if (!reducedMotion) {
-      // No media URL is attached until the visitor scrolls inside the hero.
-      // Jumping directly to another section must not start a 29 MB download.
+      // Playback starts on scroll; opening-frame warming is scheduled separately.
+      // Direct visits to other sections do not start hero downloads.
       if (p > 0 && heroActive) {
         sequenceStarted = true;
         requestHeroVideo();
@@ -332,6 +332,14 @@
     } catch { heroSequence = null; }
   }
   updateScroll();
+
+  // Let first-paint assets finish, then warm only the opening hero buffer.
+  // Direct section visits, reduced motion and data-saver do not prefetch.
+  const warmHero = () => setTimeout(() => {
+    if (!reducedMotion && heroActive && !sequenceStarted && !document.hidden) heroSequence?.preload?.();
+  }, 250);
+  if (document.readyState === 'complete') warmHero();
+  else window.addEventListener('load', warmHero, { once: true });
 
   // Material chapters work independently of the animation CDN. A single open
   // panel, native buttons and arrow navigation support touch and keyboard use.
