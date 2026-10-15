@@ -11,12 +11,15 @@
     const mobile = window.matchMedia('(max-width: 900px)').matches;
     const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
     const capacity = lowMemory ? 8 : mobile ? 10 : 12;
-    const downloadAhead = lowMemory ? 16 : mobile ? 32 : 48;
-    const openingFrames = lowMemory ? 8 : 12;
+    const connection = navigator.connection;
+    const slowNetwork = connection?.saveData || /(^|-)2g$|3g/.test(connection?.effectiveType || '') ||
+      (connection?.downlink > 0 && connection.downlink < 5);
+    const downloadAhead = slowNetwork ? 12 : lowMemory ? 16 : mobile ? 32 : 48;
+    const openingFrames = lowMemory ? 4 : 6;
     const downloadConcurrency = lowMemory ? 2 : 4;
     const compressedLimit = (lowMemory ? 6 : mobile ? 12 : 16) * 1024 * 1024;
     const compressed = new Map(), downloads = new Map(), failed = new Set(), fetched = new Set();
-    let compressedBytes = 0, downloadWanted = [], warming = false;
+    let compressedBytes = 0, downloadWanted = [], warming = false, requiredFrame = 0;
     // Share original-resolution frames across devices. The smaller archive
     // softens fine building details on high-density phone displays.
     const variant = 'desktop';
@@ -82,13 +85,14 @@
       draw(old);
     };
     function plan(center) {
+      requiredFrame = center;
       const candidates = [center];
       // Most prefetch is ahead of movement, with enough behind for reversal.
       for (let offset = 1; candidates.length < capacity; offset++) {
         candidates.push(bounded(center + direction * offset));
         if (offset <= 3) candidates.push(bounded(center - direction * offset));
       }
-      wanted = [...new Set(candidates)].slice(0, capacity);
+      wanted = [...new Set(candidates)].slice(0, warming ? openingFrames : capacity);
       const keep = new Set(wanted);
       cache.forEach((bitmap, index) => {
         if (!keep.has(index)) { bitmap.close(); cache.delete(index); }
@@ -97,6 +101,13 @@
       const ahead = Array.from({ length: warming ? openingFrames : downloadAhead }, (_, offset) => bounded(center + direction * offset));
       downloadWanted = [...new Set([...wanted, ...ahead])];
       downloads.forEach((controller, index) => { if (!downloadWanted.includes(index)) controller.abort(); });
+      // A full speculative queue must not block the frame that can unblock
+      // painting. Cancel one speculative request; its finalizer frees the slot.
+      if (!compressed.has(center) && !downloads.has(center) && downloads.size >= downloadConcurrency) {
+        const speculative = [...downloads].reverse().find(([index, controller]) =>
+          index !== center && !controller.signal.aborted);
+        speculative?.[1].abort();
+      }
       pump();
     }
     function download() {
@@ -111,7 +122,9 @@
         if (fetched.has(index) && !wanted.includes(index)) continue;
         const controller = new AbortController(), epoch = generation;
         downloads.set(index, controller);
-        fetch(`./assets/hero-frames-v2/${variant}/frame-${String(index).padStart(3, '0')}.webp`, { signal: controller.signal, cache: 'force-cache' })
+        fetch(`./assets/hero-frames-v3/${variant}/frame-${String(index).padStart(3, '0')}.webp`, {
+          signal: controller.signal, cache: 'force-cache', priority: index === requiredFrame ? 'high' : 'low'
+        })
           .then(response => {
             if (!response.ok) throw new Error(`Hero frame ${response.status}`);
             return response.blob();
@@ -129,7 +142,10 @@
             }
           })
           .catch(() => { if (!controller.signal.aborted && epoch === generation) failed.add(index); })
-          .finally(() => { downloads.delete(index); pump(); });
+          .finally(() => {
+            if (downloads.get(index) === controller) downloads.delete(index);
+            pump();
+          });
       }
     }
     function pump() {

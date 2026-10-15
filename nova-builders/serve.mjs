@@ -26,7 +26,12 @@ export function createPreviewServer(root = defaultRoot) {
       }
       const info = await stat(path);
       if (!info.isFile()) { response.writeHead(404).end(); return; }
-      const headers = { 'Content-Type': types[extname(path)], 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' };
+      // A new sequence version gets a new directory; its bytes never change.
+      // Keep HTML/scripts revalidated so edits still show up on refresh.
+      const versionedFrame = /^\/assets\/hero-frames-v\d+\/desktop\/frame-\d{3}\.webp$/.test(pathname);
+      const headers = { 'Content-Type': types[extname(path)], 'Accept-Ranges': 'bytes',
+        'Cache-Control': versionedFrame ? 'public, max-age=31536000, immutable' : 'no-cache',
+        'X-Content-Type-Options': 'nosniff' };
       let start = 0;
       let end = info.size - 1;
       let status = 200;

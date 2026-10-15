@@ -44,9 +44,10 @@ test('canvas renderer and first/last frame variants are served with correct cont
   assert.match(js.headers.get('content-type'), /javascript/);
   for (const variant of ['desktop']) {
     for (const index of ['000', '191']) {
-      const response = await fetch(`${address}/assets/hero-frames-v2/${variant}/frame-${index}.webp`);
+      const response = await fetch(`${address}/assets/hero-frames-v3/${variant}/frame-${index}.webp`);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('content-type'), 'image/webp');
+      assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
       const data = Buffer.from(await response.arrayBuffer());
       assert.equal(data.toString('ascii', 8, 12), 'WEBP');
     }
@@ -54,6 +55,14 @@ test('canvas renderer and first/last frame variants are served with correct cont
   const html = await (await fetch(address)).text();
   assert.match(html, /<canvas class="hero-canvas" hidden aria-hidden="true"><\/canvas>/);
   assert.ok(html.indexOf('defer src="./hero-sequence.js"') < html.indexOf('defer src="./script.js"'));
+});
+
+test('editable HTML and scripts stay revalidated while versioned media is cached', async () => {
+  for (const path of ['/', '/hero-sequence.js', '/script.js']) {
+    const response = await fetch(`${address}${path}`);
+    assert.equal(response.headers.get('cache-control'), 'no-cache');
+    await response.arrayBuffer();
+  }
 });
 
 test('invalid and multi-part ranges are rejected, rather than downloading the full video', async () => {
