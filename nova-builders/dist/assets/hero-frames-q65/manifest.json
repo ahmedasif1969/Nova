@@ -1,0 +1,15 @@
+{
+  "source": "nova-construction-v2.mp4",
+  "frameCount": 192,
+  "fps": 24,
+  "variants": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "quality": 65,
+      "bytes": 17554384
+    }
+  ],
+  "note": "All source frames at native resolution, lossy WebP quality 65. Original MP4s and prior frame sets preserved."
+}

@@ -253,7 +253,7 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
 
 test('active sequence contains all 192 new source frames and the previous original is preserved', async () => {
   const root = new URL('../dist/assets/', import.meta.url);
-  const manifest = JSON.parse(await readFile(new URL('hero-frames-v3/manifest.json', root), 'utf8'));
+  const manifest = JSON.parse(await readFile(new URL('hero-frames-q65/manifest.json', root), 'utf8'));
   assert.equal(manifest.frameCount, 192);
   assert.equal(manifest.fps, 24);
   assert.equal(manifest.source, 'nova-construction-v2.mp4');
@@ -262,8 +262,8 @@ test('active sequence contains all 192 new source frames and the previous origin
   for (const variant of manifest.variants) {
     assert.equal(variant.width, 1280);
     assert.equal(variant.height, 720);
-    assert.equal(variant.quality, 75);
-    const folder = new URL(`hero-frames-v3/${variant.name}/`, root);
+    assert.equal(variant.quality, 65);
+    const folder = new URL(`hero-frames-q65/${variant.name}/`, root);
     const files = (await readdir(folder)).sort();
     assert.equal(files.length, 192);
     let total = 0;
@@ -279,6 +279,8 @@ test('active sequence contains all 192 new source frames and the previous origin
       total += (await stat(new URL(name, folder))).size;
     }
     assert.equal(total, variant.bytes);
+    const previous = JSON.parse(await readFile(new URL('hero-frames-v3/manifest.json', root), 'utf8'));
+    assert.ok(total < previous.variants[0].bytes * .95, 'Stronger compression reduces transfer at unchanged resolution');
     const checkpoint = JSON.parse(await readFile(new URL('hero-frames-v2/manifest.json', root), 'utf8'));
     assert.ok(total < checkpoint.variants[0].bytes * .6, 'Compression saves at least 40% without resizing or dropping frames');
   }
