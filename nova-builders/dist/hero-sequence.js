@@ -68,7 +68,7 @@
       const cssWidth = canvas.clientWidth || window.innerWidth;
       const cssHeight = canvas.clientHeight || window.innerHeight;
       // Limit repaint cost independently of the original-resolution downloads.
-      const ratio = Math.min(window.devicePixelRatio || 1, 2,
+      const ratio = Math.min(window.devicePixelRatio || 1, 1.5,
         Math.sqrt(maxCanvasPixels / Math.max(1, cssWidth * cssHeight)));
       const nextWidth = Math.max(1, Math.floor(cssWidth * ratio));
       const nextHeight = Math.max(1, Math.floor(cssHeight * ratio));
