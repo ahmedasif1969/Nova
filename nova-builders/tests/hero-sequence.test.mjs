@@ -227,19 +227,19 @@ test('decoders prepare consecutive frames from the displayed position before the
   assert.equal(p.live(), 0);
 });
 
-test('phone canvas caps 2x/3x displays at 1.5x after rotation', async () => {
+test('phone canvas caps 2x/3x displays at 2x after rotation', async () => {
   for (const dpr of [2, 3]) {
     const p = fixture({ mobile: true, dpr });
     p.api.setProgress(.5, true); await p.settle();
-    assert.equal(p.canvas.width, 390 * 1.5);
-    assert.equal(p.canvas.height, 844 * 1.5);
+    assert.equal(p.canvas.width, 390 * 2);
+    assert.equal(p.canvas.height, 844 * 2);
     assert.equal(p.context.imageSmoothingEnabled, true);
     assert.equal(p.context.imageSmoothingQuality, 'high');
     const frame = p.api.stats().displayed;
     p.canvas.clientWidth = 844; p.canvas.clientHeight = 390;
     p.api.resize();
-    assert.equal(p.canvas.width, 844 * 1.5);
-    assert.equal(p.canvas.height, 390 * 1.5);
+    assert.equal(p.canvas.width, 844 * 2);
+    assert.equal(p.canvas.height, 390 * 2);
     assert.equal(p.api.stats().displayed, frame);
     assert.equal(p.canvas.hidden, false);
     p.api.destroy(); await p.microtasks();
@@ -320,7 +320,7 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
   assert.equal(p.canvas.hidden, false);
   assert.equal(p.canvas.width, width, 'Do not clear retained pixels without a replacement');
   p.api.setProgress(.3, true); await p.settle();
-  assert.equal(p.canvas.width, 960);
+  assert.equal(p.canvas.width, 1280);
   assert.equal(p.api.stats().displayed, Math.round(.3 * 191));
   p.api.destroy(); await p.microtasks();
 });
