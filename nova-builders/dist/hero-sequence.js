@@ -23,7 +23,7 @@
     // Wide screens keep the complete source image.
     const chooseVariant = () => (canvas.clientWidth || window.innerWidth) <= 640 &&
       (canvas.clientWidth || window.innerWidth) / (canvas.clientHeight || window.innerHeight) <= 512 / 720
-      ? 'mobile-portrait' : 'desktop';
+      ? 'mobile-portrait-q85' : 'desktop';
     let variant = chooseVariant();
     const maxCanvasPixels = lowMemory ? 2000000 : 4000000;
     const lastFrame = 191;

@@ -10,7 +10,8 @@ const source = 'nova-construction-v2.mp4';
 const sequenceFolder = 'hero-frames-q65';
 const variants = [
   { name: 'desktop', width: 1280, height: 720, quality: 65, filter: 'scale=1280:720' },
-  { name: 'mobile-portrait', width: 512, height: 720, quality: 65, filter: 'crop=512:720:384:0' }
+  { name: 'mobile-portrait', width: 512, height: 720, quality: 65, filter: 'crop=512:720:384:0' },
+  { name: 'mobile-portrait-q85', width: 512, height: 720, quality: 85, filter: 'crop=512:720:384:0' }
 ];
 const selected = process.argv[3] ? variants.filter(variant => variant.name === process.argv[3]) : variants;
 if (!selected.length) throw new Error(`Unknown variant: ${process.argv[3]}`);
@@ -45,6 +46,6 @@ const combined = variants.filter(variant => selected.some(item => item.name === 
 await writeFile(manifestPath, JSON.stringify({
   source, frameCount: counts[0], fps: 24,
   variants: combined,
-  note: 'Desktop uses native 1280x720 frames. Mobile portrait frames crop the original 512x720 center without resizing. Both use lossy WebP quality 65; original MP4s are preserved.'
+  note: 'Desktop uses native 1280x720 frames at WebP quality 65. Mobile portrait frames crop the original 512x720 center without resizing. Quality 65 is archived; quality 85 is active. Original MP4s are preserved.'
 }, null, 2) + '\n');
 console.log('Hero sequence generated:', selected);

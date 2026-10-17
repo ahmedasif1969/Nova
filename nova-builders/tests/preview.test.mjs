@@ -42,7 +42,7 @@ test('canvas renderer and first/last frame variants are served with correct cont
   const js = await fetch(`${address}/hero-sequence.js`);
   assert.equal(js.status, 200);
   assert.match(js.headers.get('content-type'), /javascript/);
-  for (const variant of ['desktop', 'mobile-portrait']) {
+  for (const variant of ['desktop', 'mobile-portrait-q85']) {
     for (const index of ['000', '191']) {
       const response = await fetch(`${address}/assets/hero-frames-q65/${variant}/frame-${index}.webp`);
       assert.equal(response.status, 200);

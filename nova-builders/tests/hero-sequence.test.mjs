@@ -33,7 +33,7 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
     createImageBitmap: decode,
     fetch: async (url, { signal }) => {
       requests.push({ url, signal });
-      const response = { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize, mobilePortrait: url.includes('/mobile-portrait/') }) };
+      const response = { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize, mobilePortrait: url.includes('/mobile-portrait') }) };
       return slowFetch ? new Promise(resolve => fetches.push(() => resolve(response))) : response;
     },
     requestAnimationFrame: callback => { frames.set(++id, callback); return id; },
@@ -110,7 +110,7 @@ test('decoded cache, decode concurrency and backing store stay bounded on deskto
     assert.ok(p.peak() <= p.api.stats().capacity + p.api.stats().decodeConcurrency, 'Include transient decoding buffers in the bound');
     assert.ok(p.canvas.width * p.canvas.height <= (options.deviceMemory === 4 ? 2000000 : 4000000), 'Backing store respects the device pixel budget');
     assert.equal(p.api.stats().capacity, options.deviceMemory === 4 ? 10 : 12);
-    const variant = options.mobile ? 'mobile-portrait' : 'desktop';
+    const variant = options.mobile ? 'mobile-portrait-q85' : 'desktop';
     assert.ok(p.requests.every(request => request.url.includes(`/${variant}/`)), 'Each device downloads only its selected frames');
     p.api.destroy(); await p.microtasks();
     assert.equal(p.live(), 0);
@@ -244,12 +244,12 @@ test('phone canvas caps 2x/3x displays at 1.5x after rotation', async () => {
     assert.equal(p.canvas.height, 390 * 1.5);
     assert.equal(p.api.stats().displayed, frame);
     assert.equal(p.api.stats().variant, 'desktop');
-    assert.ok(p.requests.some(request => request.url.includes('/mobile-portrait/')));
+    assert.ok(p.requests.some(request => request.url.includes('/mobile-portrait-q85/')));
     assert.ok(p.requests.some(request => request.url.includes('/desktop/')));
     p.canvas.clientWidth = 390; p.canvas.clientHeight = 844;
     p.api.resize();
     await p.settle();
-    assert.equal(p.api.stats().variant, 'mobile-portrait');
+    assert.equal(p.api.stats().variant, 'mobile-portrait-q85');
     assert.equal(p.api.stats().displayed, frame);
     assert.equal(p.canvas.width, 390 * 1.5);
     assert.equal(p.canvas.hidden, false);
@@ -347,7 +347,7 @@ test('both active sequences contain all 192 frames and the previous original is 
   for (const variant of manifest.variants) {
     assert.equal(variant.width, variant.name === 'desktop' ? 1280 : 512);
     assert.equal(variant.height, 720);
-    assert.equal(variant.quality, 65);
+    assert.equal(variant.quality, variant.name === 'mobile-portrait-q85' ? 85 : 65);
     const folder = new URL(`hero-frames-q65/${variant.name}/`, root);
     const files = (await readdir(folder)).sort();
     assert.equal(files.length, 192);
@@ -371,7 +371,10 @@ test('both active sequences contain all 192 frames and the previous original is 
   }
   assert.ok(manifest.variants.find(variant => variant.name === 'mobile-portrait').bytes <
     manifest.variants.find(variant => variant.name === 'desktop').bytes * .6,
-  'Portrait frames save at least 40% of hero downloads');
+  'Archived quality-65 portrait frames save at least 40% of hero downloads');
+  assert.ok(manifest.variants.find(variant => variant.name === 'mobile-portrait-q85').bytes <
+    manifest.variants.find(variant => variant.name === 'desktop').bytes,
+  'Higher quality portrait frames still transfer less than desktop');
   const original = await readFile(new URL('nova-construction.mp4', root));
   assert.equal(createHash('sha256').update(original).digest('hex'), '9e22851da39ac9eaca20594f562a1f5dc17d536d25c230b8be81d6436db6ada1');
 });
