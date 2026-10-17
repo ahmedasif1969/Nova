@@ -8,10 +8,9 @@ const textRevealSource = await readFile(new URL('../dist/text-reveal.js', import
 const sectionRevealSource = await readFile(new URL('../dist/section-reveal.js', import.meta.url), 'utf8');
 
 // Exercise the page's event handlers without a browser or animation CDNs.
-function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = false, frameCallbacks = true, motionLibrary = false, sectionLibrary = false, sequenceLibrary = false, width = 1440, height = 1000, pinnedHeight = 650 } = {}) {
+function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = false, motionLibrary = false, sectionLibrary = false, sequenceLibrary = false, width = 1440, height = 1000, pinnedHeight = 650 } = {}) {
   const nodes = new Map();
   const frames = new Map();
-  const videoFrames = new Map();
   const timers = new Map();
   const groups = new Map();
   const observers = [];
@@ -51,7 +50,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     scrollIntoView() { this.scrolledTo = true; }
     getBoundingClientRect() { return { top: 100, left: 100, right: 800, bottom: 900 }; }
   }
-  const selectors = ['.hero-video', '[data-header]', '.progress span', '[data-menu-toggle]', '[data-mobile-menu]', '[data-consultation-form]', '[data-project-dialog]', '[data-hero]', '.hero-poster', '.hero-copy', '[data-build-progress]', '[data-build-phase]', '[data-project-count]', '.project-list', '[data-dialog-title]', '[data-dialog-location]', '[data-dialog-description]', '[data-dialog-status]', '[data-dialog-image]', '[data-dialog-specs]', '[data-dialog-features]', '[data-dialog-close]', '[data-dialog-enquire]', '[data-enquiry-result]', '#enquiry-draft', '[data-form-note]', '[data-copy-enquiry]', '#building-model', '.model-stage', '[data-model-hint]', '#top', '#legacy', '#projects', '#approach', '#model-study', '#consultation'];
+  const selectors = ['[data-header]', '.progress span', '[data-menu-toggle]', '[data-mobile-menu]', '[data-consultation-form]', '[data-project-dialog]', '[data-hero]', '.hero-poster', '.hero-copy', '[data-build-progress]', '[data-build-phase]', '[data-project-count]', '.project-list', '[data-dialog-title]', '[data-dialog-location]', '[data-dialog-description]', '[data-dialog-status]', '[data-dialog-image]', '[data-dialog-specs]', '[data-dialog-features]', '[data-dialog-close]', '[data-dialog-enquire]', '[data-enquiry-result]', '#enquiry-draft', '[data-form-note]', '[data-copy-enquiry]', '#building-model', '.model-stage', '[data-model-hint]', '#top', '#legacy', '#projects', '#approach', '#model-study', '#consultation'];
   selectors.forEach(selector => nodes.set(selector, new Element()));
   document = new Element();
   document.body = new Element();
@@ -130,18 +129,6 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     window.gsap = gsap; window.ScrollTrigger = ScrollTrigger;
   }
   const hero = nodes.get('[data-hero]'); hero.offsetTop = 0; hero.offsetHeight = 3000;
-  const video = nodes.get('.hero-video');
-  video.readyState = 0; video.duration = 10; video.seeking = false; video.pause = () => {};
-  const videoSource = new Element(); videoSource.dataset.src = './assets/nova-construction-v2-scrub.mp4';
-  nodes.set('source[data-src]', videoSource);
-  video.loads = 0; video.load = () => { video.loads++; };
-  let currentTime = 0;
-  video.seeks = [];
-  Object.defineProperty(video, 'currentTime', { get: () => currentTime, set: time => { currentTime = time; video.seeking = true; video.seeks.push(time); } });
-  if (frameCallbacks) {
-    video.requestVideoFrameCallback = callback => { videoFrames.set(++frameId, callback); return frameId; };
-    video.cancelVideoFrameCallback = id => videoFrames.delete(id);
-  }
   const filters = ['all', 'residential', 'mixed'].map(value => { const node = new Element(); node.dataset.filter = value; return node; });
   const cards = ['residential', 'residential', 'mixed'].map(value => { const node = new Element(); node.dataset.category = value; return node; });
   const projects = ['aurelian', 'vela', 'meridian'].map(value => { const node = new Element(); node.dataset.project = value; return node; });
@@ -184,24 +171,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     for (const [id, timer] of [...timers]) if (timer.at <= clock) { timers.delete(id); timer.callback(); }
   };
   const flush = (milliseconds = 1000 / 60) => { advance(milliseconds); const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(clock)); };
-  const presentFrame = (mediaTime = Math.floor(currentTime * 24 + 1e-8) / 24) => {
-    const pending = [...videoFrames.values()]; videoFrames.clear();
-    pending.forEach(callback => callback(clock, { mediaTime }));
-  };
-  return { nodes, filters, cards, projects, materials, materialAccordion, marquee, marqueeTrack, marqueeToggle, paragraph, motionCalls, mediaRegistrations, pins, window, document, video, videoSource, observers, frames, videoFrames, timers, flush, advance, presentFrame, sequenceCallbacks, sequenceCalls, clipboard: () => clipboard };
-}
-
-async function startScrub(p, scroll = 400) {
-  p.video.readyState = 2;
-  await p.video.emit('loadedmetadata'); await p.video.emit('loadeddata');
-  p.window.scrollY = scroll; await p.window.emit('scroll'); p.flush(); p.flush();
-}
-
-async function settleScrub(p, cycles = 250) {
-  for (let i = 0; i < cycles; i++) {
-    if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
-    p.presentFrame(); p.flush();
-  }
+  return { nodes, filters, cards, projects, materials, materialAccordion, marquee, marqueeTrack, marqueeToggle, paragraph, motionCalls, mediaRegistrations, pins, window, document, observers, frames, timers, flush, advance, sequenceCallbacks, sequenceCalls, clipboard: () => clipboard };
 }
 
 test('canvas is primary, copy follows painted frames and the poster cannot cover reverse catch-up', async () => {
@@ -209,8 +179,6 @@ test('canvas is primary, copy follows painted frames and the poster cannot cover
   assert.equal(p.sequenceCalls.at(-1).active, false);
   p.window.scrollY = 1800; await p.window.emit('scroll'); p.flush();
   assert.equal(p.sequenceCalls.at(-1).active, true);
-  assert.equal(p.video.loads, 0, 'Do not download the MP4 alongside image frames');
-  assert.equal(p.video.seeks.length, 0);
   assert.equal(p.nodes.get('.hero-copy').style.opacity, '1', 'Keep copy at the opening until the first frame is painted');
   p.sequenceCallbacks.onDraw(.8, 234);
   assert.equal(p.nodes.get('.hero-copy').style.opacity, '0');
@@ -234,8 +202,6 @@ test('opening buffer starts after the cover loads without waiting for page load'
   assert.equal(p.sequenceCalls.filter(call => call.preload).length, 1);
   p.sequenceCallbacks.onDraw(0, 0);
   assert.equal(p.nodes.get('.hero-poster').style.opacity, '0', 'Warm-up uncovers frame zero before scrolling');
-  assert.equal(p.video.loads, 0);
-  assert.equal(p.video.seeks.length, 0);
   for (const options of [{ initialScroll: 5000 }, { reducedMotion: true }, { initialScroll: 400 }]) {
     const quiet = pageFixture({ ...options, sequenceLibrary: true });
     await quiet.nodes.get('.hero-poster').emit('load'); quiet.flush();
@@ -253,18 +219,31 @@ test('cold first frame uncovers construction without waiting for 26 painted fram
   assert.equal(p.nodes.get('[data-build-phase]').textContent, 'The vision');
 });
 
-test('canvas failure enables the preserved MP4, and direct jumps/reduced motion remain lazy', async () => {
+test('canvas failure restores a static poster immediately and keeps it on subsequent scrolls', async () => {
   const p = pageFixture({ sequenceLibrary: true });
-  p.window.scrollY = 400; await p.window.emit('scroll'); p.flush();
-  p.sequenceCallbacks.onError(new Error('Frame failed')); p.flush();
-  assert.equal(p.video.loads, 1);
+  p.sequenceCallbacks.onDraw(.8, 153);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0');
+  p.sequenceCallbacks.onError(new Error('Frame failed'));
   assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
-  await startScrub(p); await settleScrub(p);
-  assert.ok(p.video.seeks.length > 0);
-  for (const options of [{ initialScroll: 5000 }, { reducedMotion: true }]) {
-    const quiet = pageFixture({ ...options, sequenceLibrary: true });
-    assert.ok(quiet.sequenceCalls.every(call => !call.active));
-    assert.equal(quiet.video.loads, 0);
+  assert.equal(p.nodes.get('.hero-copy').style.opacity, '1');
+  for (const y of [1800, 5000, 0]) {
+    p.window.scrollY = y; await p.window.emit('scroll'); p.flush();
+    assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+    assert.equal(p.nodes.get('.hero-copy').style.opacity, '1');
+    assert.equal(p.nodes.get('[data-build-phase]').textContent, 'The vision');
+  }
+});
+
+test('missing canvas support and reduced motion retain the still hero through scroll and visibility changes', async () => {
+  for (const options of [{}, { sequenceLibrary: true, reducedMotion: true }]) {
+    const p = pageFixture(options);
+    for (const y of [0, 1800, 5000, 0]) {
+      p.window.scrollY = y; await p.window.emit('scroll'); p.flush();
+      p.document.hidden = true; await p.document.emit('visibilitychange'); p.flush();
+      p.document.hidden = false; await p.document.emit('visibilitychange'); p.flush();
+      assert.equal(p.nodes.get('.hero-poster').style.opacity ?? '1', '1');
+      assert.ok(p.sequenceCalls.every(call => !call.active));
+    }
   }
 });
 
@@ -313,222 +292,6 @@ test('Escape restores the mobile menu’s focus and scrolling state', async () =
   assert.equal(p.document.activeElement, p.nodes.get('[data-menu-toggle]'));
 });
 
-test('rapid scrolling catches up in bounded steps after both decoding and presentation', async () => {
-  const p = pageFixture();
-  await startScrub(p);
-  assert.equal(p.video.seeks.length, 1);
-  assert.ok(Math.floor(p.video.seeks[0] * 24) <= 3, 'Do not jump more than three source frames toward the destination');
-  p.window.scrollY = 1000; await p.window.emit('scroll'); p.flush();
-  p.window.scrollY = 1800; await p.window.emit('scroll'); p.flush();
-  assert.equal(p.video.seeks.length, 1, 'Do not interrupt an in-flight decode');
-  p.video.seeking = false; await p.video.emit('seeked');
-  assert.equal(p.video.seeks.length, 1, 'Seeked alone must not chain a new seek');
-  p.presentFrame(0);
-  assert.equal(p.video.seeks.length, 1, 'A stale compositor frame must not release the pending seek');
-  p.presentFrame(); p.flush();
-  assert.equal(p.video.seeks.length, 2);
-  assert.ok(p.video.seeks[1] - p.video.seeks[0] <= 3 / 24 + 1e-9);
-  await settleScrub(p);
-  assert.ok(p.video.currentTime > 8 && p.video.currentTime < 10, 'Eventually reach the latest destination, even after scrolling stops');
-  for (let i = 1; i < p.video.seeks.length; i++) assert.ok(p.video.seeks[i] - p.video.seeks[i - 1] <= 3 / 24 + 1e-9);
-  assert.equal(p.frames.size + p.videoFrames.size + p.timers.size, 0, 'Settled video must not keep polling');
-  await p.video.emit('error'); p.flush();
-  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
-});
-
-test('seeks select the interior of a source frame instead of an ambiguous frame boundary', async () => {
-  const p = pageFixture(); await startScrub(p, 1000);
-  await settleScrub(p);
-  assert.ok(p.video.seeks.length > 5);
-  for (const time of p.video.seeks) {
-    const fraction = time * 24 - Math.floor(time * 24);
-    assert.ok(Math.abs(fraction - .5) < 1e-8, `Seek ${time} must land inside a frame, not on its edge`);
-  }
-});
-
-test('once the intended frame is selected, idle events do not trigger a final corrective seek', async () => {
-  for (const position of [400, 405.2, 999.95, 1000.05, 1800]) {
-    const p = pageFixture(); await startScrub(p, position); await settleScrub(p);
-    const expected = Math.round(Math.max(0, (position / 2000 - .035) / .965) * 9.95 * 24);
-    const displayed = Math.floor(p.video.currentTime * 24 + 1e-8);
-    assert.equal(displayed, expected);
-    const count = p.video.seeks.length;
-    for (let tick = 0; tick < 12; tick++) {
-      await p.video.emit('canplay'); await p.video.emit('seeked');
-      await p.window.emit('scroll'); p.flush(); p.flush();
-    }
-    assert.equal(p.video.seeks.length, count, 'No terminal correction after the video is already resting');
-    assert.equal(p.frames.size + p.videoFrames.size, 0);
-  }
-});
-
-test('reversing direction smoothly reaches the new destination without a stale forward jump', async () => {
-  const p = pageFixture(); await startScrub(p, 1600);
-  await settleScrub(p, 15);
-  const before = p.video.currentTime;
-  assert.ok(before > 1);
-  p.window.scrollY = 100; await p.window.emit('scroll'); p.flush();
-  if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
-  p.presentFrame(); p.flush();
-  assert.ok(p.video.currentTime < before);
-  await settleScrub(p);
-  assert.ok(p.video.currentTime < .2);
-  for (let i = 1; i < p.video.seeks.length; i++) assert.ok(Math.abs(p.video.seeks[i] - p.video.seeks[i - 1]) <= 3 / 24 + 1e-9);
-});
-
-test('returning to the top keeps the reverse video visible until its opening frame is decoded', async () => {
-  for (const frameCallbacks of [true, false]) {
-    const p = pageFixture({ frameCallbacks });
-    await startScrub(p, 1800); await settleScrub(p);
-    const poster = p.nodes.get('.hero-poster');
-    assert.equal(poster.style.opacity, '0');
-    const previousTime = p.video.currentTime;
-    p.window.scrollY = 0; await p.window.emit('scroll'); p.flush();
-    assert.equal(poster.style.opacity, '0', 'Scroll position alone must not cover the unwinding video');
-    for (let tick = 0; tick < 20; tick++) {
-      if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
-      p.presentFrame(); p.flush();
-      assert.equal(poster.style.opacity, '0', 'Keep later construction frames visible during reverse catch-up');
-    }
-    assert.ok(p.video.currentTime < previousTime && p.video.currentTime > 0.5);
-    await settleScrub(p);
-    assert.equal(Math.floor(p.video.currentTime * 24), 0);
-    assert.equal(poster.style.opacity, '1', 'Restore the twilight cover only after the opening frame is selected');
-    assert.equal(p.frames.size + p.videoFrames.size, 0);
-  }
-});
-
-test('returning from another section reverses without reloading or restoring the poster early', async () => {
-  const p = pageFixture(); await startScrub(p, 1800); await settleScrub(p);
-  p.window.scrollY = 5000; await p.window.emit('scroll'); p.flush();
-  p.window.scrollY = 150; await p.window.emit('scroll'); p.flush(); p.flush();
-  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0');
-  await settleScrub(p);
-  assert.ok(p.video.currentTime < 0.5);
-  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0', 'Even near the top, video stays visible until fully rewound');
-  assert.equal(p.video.loads, 1);
-});
-
-test('reversing an in-flight opening seek does not restore the cover before decoding finishes', async () => {
-  const p = pageFixture(); await startScrub(p, 100);
-  const poster = p.nodes.get('.hero-poster');
-  const fadedOpacity = Number(poster.style.opacity);
-  assert.ok(fadedOpacity > 0 && fadedOpacity < 1, 'Preserve the original opening crossfade');
-  assert.equal(p.video.seeking, true);
-  p.window.scrollY = 0; await p.window.emit('scroll'); p.flush();
-  assert.equal(Number(poster.style.opacity), fadedOpacity);
-  await settleScrub(p);
-  assert.equal(poster.style.opacity, '1');
-  p.window.scrollY = 1800; await p.window.emit('scroll'); p.flush(); p.flush();
-  await settleScrub(p);
-  assert.equal(poster.style.opacity, '0');
-  assert.ok(p.video.currentTime > 8);
-  assert.equal(p.video.loads, 1, 'Forward scrolling after rewinding must reuse the video');
-});
-
-test('frame presentation before seeked still waits for the decode to finish', async () => {
-  const p = pageFixture(); await startScrub(p);
-  p.presentFrame(); p.flush();
-  assert.equal(p.video.seeks.length, 1);
-  p.video.seeking = false; await p.video.emit('seeked'); p.flush();
-  assert.equal(p.video.seeks.length, 2);
-});
-
-test('browsers without frame callbacks leave a paint opportunity between seeks', async () => {
-  const p = pageFixture({ frameCallbacks: false }); await startScrub(p);
-  p.video.seeking = false; await p.video.emit('seeked');
-  assert.equal(p.video.seeks.length, 1);
-  p.flush(); assert.equal(p.video.seeks.length, 1);
-  p.flush(); assert.equal(p.video.seeks.length, 2);
-});
-
-test('missing frame callbacks do not impose a 120 ms pause after every decoded frame', async () => {
-  const p = pageFixture(); await startScrub(p, 1000);
-  p.video.seeking = false; await p.video.emit('seeked');
-  p.flush();
-  assert.equal(p.video.seeks.length, 1, 'Leave one browser paint opportunity');
-  p.flush();
-  assert.equal(p.video.seeks.length, 2, 'Resume within two display ticks, without waiting for a missing callback');
-});
-
-test('missing compositor callbacks no longer throttle the controller to single-digit updates', async () => {
-  const p = pageFixture(); await startScrub(p, 1800);
-  const start = p.video.seeks.length;
-  // Idealized fast decode, 60 Hz display, and no compositor callbacks. This
-  // measures OUR scheduler's ceiling, not real device decode/render speed.
-  for (let tick = 0; tick < 60; tick++) {
-    if (p.video.seeking) { p.video.seeking = false; await p.video.emit('seeked'); }
-    p.flush();
-  }
-  const updates = p.video.seeks.length - start;
-  assert.ok(updates >= 24, `Expected at least 24 opportunities in one simulated second, got ${updates}`);
-  assert.equal(p.timers.size, 0);
-});
-
-test('a missing paused-video callback cannot deadlock or interrupt an active seek', async () => {
-  const p = pageFixture(); await startScrub(p);
-  p.advance(1000); p.flush();
-  assert.equal(p.video.seeks.length, 1, 'Paint fallback must never run while decoding');
-  p.video.seeking = false; await p.video.emit('seeked');
-  p.flush(); p.flush();
-  assert.equal(p.video.seeks.length, 2);
-  assert.ok(p.video.seeks[1] - p.video.seeks[0] <= 3 / 24 + 1e-9, 'A long pause must not turn into a large catch-up jump');
-  assert.equal(p.videoFrames.size, 1, 'Abandoned frame callback must be cancelled');
-});
-
-test('leaving the hero or hiding the tab cancels video work and resumes safely on return', async () => {
-  const p = pageFixture(); await startScrub(p);
-  const oldCallback = [...p.videoFrames.values()][0];
-  p.window.scrollY = 5000; await p.window.emit('scroll'); p.flush();
-  assert.equal(p.videoFrames.size + p.timers.size + p.frames.size, 0);
-  p.video.seeking = false; await p.video.emit('seeked'); p.flush();
-  assert.equal(p.video.seeks.length, 1);
-  p.window.scrollY = 800; await p.window.emit('scroll'); p.flush(); p.flush();
-  assert.equal(p.video.seeks.length, 2);
-  oldCallback(0, { mediaTime: p.video.currentTime }); p.flush();
-  assert.equal(p.video.seeks.length, 2, 'A late cancelled callback must not unlock a newer seek');
-  p.document.hidden = true; await p.document.emit('visibilitychange');
-  assert.equal(p.videoFrames.size + p.timers.size + p.frames.size, 0);
-  p.video.seeking = false; await p.video.emit('seeked');
-  p.document.hidden = false; await p.document.emit('visibilitychange'); p.flush(); p.flush();
-  assert.equal(p.video.seeks.length, 3);
-});
-
-test('temporarily unavailable frames wait for canplay without busy polling', async () => {
-  const p = pageFixture(); await startScrub(p);
-  p.video.seeking = false; p.video.readyState = 1;
-  await p.video.emit('seeked'); p.presentFrame(); p.flush();
-  assert.equal(p.frames.size, 0);
-  assert.equal(p.video.seeks.length, 1);
-  p.video.readyState = 2; await p.video.emit('canplay'); p.flush();
-  assert.equal(p.video.seeks.length, 2);
-});
-
-test('the video is requested once, only after scrolling inside the hero', async () => {
-  const p = pageFixture();
-  assert.equal(p.videoSource.src, undefined);
-  assert.equal(p.video.loads, 0);
-  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
-  p.window.scrollY = 400; await p.window.emit('scroll'); p.flush();
-  assert.equal(p.videoSource.src, './assets/nova-construction-v2-scrub.mp4');
-  assert.equal(p.video.preload, 'auto');
-  assert.equal(p.video.loads, 1);
-  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1', 'Keep cover until frames are decoded');
-  p.window.scrollY = 800; await p.window.emit('scroll'); p.flush();
-  assert.equal(p.video.loads, 1, 'Scrolling must not repeatedly restart the download');
-});
-
-test('direct section jumps and reduced motion do not request the video', async () => {
-  const jumped = pageFixture({ initialScroll: 5000 });
-  assert.equal(jumped.video.loads, 0);
-  jumped.window.scrollY = 800; await jumped.window.emit('scroll'); jumped.flush();
-  assert.equal(jumped.video.loads, 1, 'Returning to the hero still enables scrubbing');
-  const reduced = pageFixture({ reducedMotion: true });
-  reduced.window.scrollY = 800; await reduced.window.emit('scroll'); reduced.flush();
-  assert.equal(reduced.video.loads, 0);
-  assert.equal(reduced.videoSource.src, undefined);
-});
-
 test('the model library loads once, near the studio, and failures retain a fallback', async () => {
   const p = pageFixture();
   const observer = p.observers.find(observer => observer.options.rootMargin === '300px');
@@ -568,7 +331,6 @@ test('a stylesheet failure still enables the page interactions safely', async ()
   await p.nodes.get('[data-deferred-styles]').emit('error');
   await p.nodes.get('[data-menu-toggle]').emit('click');
   assert.equal(p.nodes.get('[data-mobile-menu]').inert, false);
-  assert.equal(p.video.loads, 0);
 });
 
 test('material chapters support click, touch and wrapping keyboard navigation without GSAP', async () => {
@@ -610,7 +372,6 @@ test('section reveals mount once, project filters finish pending entrances, and 
   p.mediaRegistrations.find(entry => entry.query === '(prefers-reduced-motion: no-preference)').cleanup();
   assert.ok(p.cards.every(card => card.listeners.focusin.length === 0));
   assert.ok(p.cards.every(card => card.children.every(child => !child.classList.contains('section-reveal-item'))));
-  assert.equal(p.video.loads, 0, 'New chapter motion must not trigger hero downloads');
 });
 
 test('anchor navigation does not finish offscreen content farther down the destination', async () => {
@@ -686,5 +447,4 @@ test('a single filtered development occupies the whole grid without reloading he
   assert.equal(p.nodes.get('.project-list').dataset.visibleCount, '1');
   await p.filters[0].emit('click');
   assert.equal(p.nodes.get('.project-list').dataset.visibleCount, '3');
-  assert.equal(p.video.loads, 0);
 });

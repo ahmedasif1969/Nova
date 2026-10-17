@@ -16,7 +16,6 @@
     return;
   }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const video = document.querySelector('.hero-video');
   const header = document.querySelector('[data-header]');
   const progress = document.querySelector('.progress span');
   const menuToggle = document.querySelector('[data-menu-toggle]');
@@ -82,37 +81,18 @@
     });
   });
 
-  // Canvas is primary when supported. The preserved MP4 seek controller below
-  // is a fallback; a completed seek isn't necessarily a painted frame.
+  // Canvas frames only; unsupported browsers retain the poster.
   const hero = document.querySelector('[data-hero]');
   const heroPoster = document.querySelector('.hero-poster');
   const heroCopy = document.querySelector('.hero-copy');
   const buildProgress = document.querySelector('[data-build-progress]');
   const buildPhase = document.querySelector('[data-build-phase]');
-  let videoDuration = 0;
-  let targetVideoTime = 0;
-  let videoReady = false;
-  let videoRequested = false;
   let scrollFrame = 0;
-  const frameDuration = 1 / 24; // The unchanged source is 24 fps.
-  const smoothingMs = 120;
-  const maxSeekStep = 3 * frameDuration;
   let heroActive = false;
-  let scrubTime = 0;
-  let scrubFrame = 0;
-  let lastScrubTick = 0;
-  let awaitingFrame = false;
-  let framePresented = false;
-  let frameCallback = null;
-  let paintFrame = 0;
-  let seekGeneration = 0;
   let heroProgress = 0;
-  let displayedVideoFrame = 0;
-  let posterOpacity = 1;
   let heroSequence = null;
   let sequenceStarted = false;
   let sequenceReady = false;
-  let displayedHeroProgress = 0;
   const clamp = value => Math.max(0, Math.min(1, value));
   const paintHeroCopy = p => {
     buildProgress.style.transform = `scaleX(${p})`;
@@ -124,123 +104,8 @@
     heroCopy.inert = copyOpacity < .05;
   };
   const syncHeroPoster = () => {
-    if (heroSequence && !reducedMotion) {
-      // Frame zero is painted during warm-up. Keep the poster only until
-      // canvas has real pixels, including after a return to the opening frame.
-      posterOpacity = sequenceReady ? 0 : 1;
-      heroPoster.style.opacity = String(posterOpacity);
-      return;
-    }
-    if (!videoReady || reducedMotion) posterOpacity = 1;
-    else {
-      // Once a real frame is ready, uncover it based on the user's scroll,
-      // not on how many slow-to-download frames have already been painted.
-      const requestedOpacity = 1 - clamp((heroProgress - .035) / .13);
-      const rewindComplete = targetVideoTime < frameDuration * .5 && displayedVideoFrame === 0 && !video.seeking && !awaitingFrame;
-      // Scroll can reach the top before reverse decoding catches up. Keep the
-      // video uncovered until the opening frame has actually completed its seek.
-      // Preserve the initial forward fade and the cover on load/error.
-      if (requestedOpacity <= posterOpacity || rewindComplete) posterOpacity = requestedOpacity;
-    }
-    heroPoster.style.opacity = String(posterOpacity);
-  };
-  const clearFrameWait = () => {
-    seekGeneration++;
-    if (frameCallback !== null && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(frameCallback);
-    if (paintFrame) cancelAnimationFrame(paintFrame);
-    frameCallback = null;
-    paintFrame = 0;
-    awaitingFrame = framePresented = false;
-  };
-  const stopVideoScrub = () => {
-    if (scrubFrame) cancelAnimationFrame(scrubFrame);
-    scrubFrame = 0;
-    lastScrubTick = 0;
-    scrubTime = video.currentTime || 0;
-    clearFrameWait();
-  };
-  const requestVideoUpdate = () => {
-    if (heroSequence) return;
-    if (!scrubFrame && heroActive && !document.hidden && videoReady && videoDuration && !reducedMotion && !awaitingFrame && !video.seeking) {
-      scrubFrame = requestAnimationFrame(updateVideoScrub);
-    }
-  };
-  const finishFrameWait = () => {
-    displayedVideoFrame = Math.floor(video.currentTime / frameDuration + 1e-7);
-    clearFrameWait();
-    syncHeroPoster();
-    // Don't count time spent decoding/waiting toward the next catch-up step.
-    lastScrubTick = 0;
-    requestVideoUpdate();
-  };
-  const waitForPaintFallback = () => {
-    if (paintFrame) return;
-    const generation = seekGeneration;
-    // Race compositor acknowledgement against one paint opportunity AFTER
-    // decoding. Never add a fixed timeout to every frame of a paused video.
-    // The next seek is scheduled on the following RAF, after this paint.
-    paintFrame = requestAnimationFrame(() => {
-      paintFrame = 0;
-      if (generation === seekGeneration && awaitingFrame && !video.seeking) finishFrameWait();
-    });
-  };
-  const seekVideo = time => {
-    awaitingFrame = true;
-    framePresented = false;
-    const generation = ++seekGeneration;
-    if (typeof video.requestVideoFrameCallback === 'function') {
-      const onFrame = (now, metadata) => {
-        if (generation !== seekGeneration || !awaitingFrame) return;
-        frameCallback = null;
-        // Ignore an old frame submitted just before this seek began.
-        if (Math.abs(metadata.mediaTime - time) < frameDuration * .75) {
-          framePresented = true;
-          if (!video.seeking) finishFrameWait();
-        } else frameCallback = video.requestVideoFrameCallback(onFrame);
-      };
-      frameCallback = video.requestVideoFrameCallback(onFrame);
-    }
-    try { video.currentTime = time; }
-    catch {
-      stopVideoScrub();
-      videoReady = false;
-      requestScrollUpdate();
-    }
-  };
-  function updateVideoScrub(now) {
-    scrubFrame = 0;
-    if (!heroActive || document.hidden || !videoReady || reducedMotion) { stopVideoScrub(); return; }
-    if (video.readyState < 2 || video.seeking || awaitingFrame) { lastScrubTick = 0; return; }
-    const lastFrame = Math.max(0, Math.floor((videoDuration - .05) / frameDuration));
-    const desiredFrame = Math.max(0, Math.min(lastFrame, Math.round(targetVideoTime / frameDuration)));
-    const currentFrame = Math.floor(video.currentTime / frameDuration + 1e-7);
-    if (currentFrame === desiredFrame) {
-      // Settle by frame identity, not exact timestamp equality. Once this frame
-      // is selected, don't issue a final corrective seek at the end of easing.
-      scrubTime = targetVideoTime;
-      lastScrubTick = 0;
-      return;
-    }
-    const elapsed = lastScrubTick ? Math.max(0, Math.min(now - lastScrubTick, 50)) : 1000 / 60;
-    lastScrubTick = now;
-    const gap = targetVideoTime - scrubTime;
-    const easedStep = gap * (1 - Math.exp(-elapsed / smoothingMs));
-    scrubTime += Math.max(-maxSeekStep, Math.min(maxSeekStep, easedStep));
-    const nextFrame = Math.max(0, Math.min(lastFrame, Math.round(scrubTime / frameDuration)));
-    if (nextFrame !== currentFrame) {
-      // Seek INSIDE the selected frame's interval. Exact frame boundaries can
-      // resolve to a neighbouring frame due to timestamp/decoder precision.
-      seekVideo(Math.min(videoDuration - .001, (nextFrame + .5) * frameDuration));
-    } else requestVideoUpdate();
-  }
-  const requestHeroVideo = () => {
-    if (heroSequence || videoRequested || reducedMotion) return;
-    const source = video.querySelector('source[data-src]');
-    if (!source || !source.dataset.src) return;
-    videoRequested = true;
-    source.src = source.dataset.src;
-    video.preload = 'auto';
-    video.load();
+    // Show canvas only after an actual paint; failure keeps the still image.
+    heroPoster.style.opacity = heroSequence && sequenceReady && !reducedMotion ? '0' : '1';
   };
   const updateScroll = () => {
     scrollFrame = 0;
@@ -255,7 +120,7 @@
     heroProgress = p;
     progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
     header.classList.toggle('scrolled', y > 80);
-    if (!heroSequence) paintHeroCopy(p);
+    if (!heroSequence) paintHeroCopy(0);
     else if (!sequenceReady) {
       paintHeroCopy(0);
       if (p > .035 && heroActive) buildPhase.textContent = 'Loading construction…';
@@ -265,52 +130,16 @@
       // Direct visits to other sections do not start hero downloads.
       if (p > 0 && heroActive) {
         sequenceStarted = true;
-        requestHeroVideo();
       }
       if (heroSequence) heroSequence.setProgress(clamp((p - .035) / .965), sequenceStarted && heroActive);
-      if (!heroSequence && videoDuration) {
-        const videoProgress = clamp((p - .035) / .965);
-        const lastFrameTime = Math.floor((videoDuration - .05) / frameDuration) * frameDuration;
-        targetVideoTime = Math.min(lastFrameTime, Math.round(videoProgress * (videoDuration - .05) / frameDuration) * frameDuration);
-        if (heroActive) requestVideoUpdate();
-        else stopVideoScrub();
-      }
       syncHeroPoster();
     }
   };
   const requestScrollUpdate = () => {
     if (!scrollFrame) scrollFrame = requestAnimationFrame(updateScroll);
   };
-  const enableVideoScrub = () => {
-    videoDuration = Number.isFinite(video.duration) ? video.duration : 0;
-    video.pause();
-    requestScrollUpdate();
-  };
-  if (video.readyState >= 1) enableVideoScrub();
-  else video.addEventListener('loadedmetadata', enableVideoScrub, { once: true });
-  const markVideoReady = () => {
-    videoReady = true;
-    scrubTime = video.currentTime || 0;
-    displayedVideoFrame = Math.floor(scrubTime / frameDuration + 1e-7);
-    requestScrollUpdate();
-  };
-  if (video.readyState >= 2) markVideoReady();
-  video.addEventListener('loadeddata', markVideoReady, { once: true });
-  video.addEventListener('seeked', () => {
-    if (!awaitingFrame) {
-      displayedVideoFrame = Math.floor(video.currentTime / frameDuration + 1e-7);
-      syncHeroPoster();
-      requestVideoUpdate();
-      return;
-    }
-    if (framePresented) finishFrameWait();
-    else waitForPaintFallback();
-  });
-  video.addEventListener('canplay', requestVideoUpdate);
-  video.addEventListener('error', () => { videoReady = false; stopVideoScrub(); requestScrollUpdate(); });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      stopVideoScrub();
       if (heroSequence) heroSequence.setProgress(clamp((heroProgress - .035) / .965), false);
     }
     else requestScrollUpdate();
@@ -326,14 +155,14 @@
         canvas: document.querySelector('.hero-canvas'),
         onDraw: (p, frame) => {
           sequenceReady = true;
-          displayedHeroProgress = frame === 0 ? 0 : .035 + p * .965;
-          paintHeroCopy(displayedHeroProgress);
+          paintHeroCopy(frame === 0 ? 0 : .035 + p * .965);
           syncHeroPoster();
         },
         onError: () => {
           heroSequence = null;
           sequenceReady = false;
-          requestHeroVideo();
+          syncHeroPoster();
+          paintHeroCopy(0);
           requestScrollUpdate();
         }
       });

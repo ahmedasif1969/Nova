@@ -21,7 +21,8 @@ test('cinematic hero preserves the original media and serif while keeping two cl
   assert.doesNotMatch(css, /\.hero h1 span:(?:first|last)-child \{ max-width: (?:9|11)ch/);
   assert.equal((hero.match(/class="button button-/g) || []).length, 2);
   assert.doesNotMatch(hero, /hero-edition|hero-feature|project-number|data-count|status-dot/);
-  assert.match(hero, /data-src="\.\/assets\/nova-construction-v2-scrub\.mp4"/);
+  assert.match(hero, /<canvas class="hero-canvas"/);
+  assert.doesNotMatch(hero, /<video\b|\.mp4/);
   assert.match(hero, /src="\.\/assets\/aurelian-1536\.webp"/);
   assert.match(css, /--display: "Cormorant Garamond"/);
   assert.match(css, /\.button-primary \{ color: var\(--ink\); background: var\(--sand\)/);

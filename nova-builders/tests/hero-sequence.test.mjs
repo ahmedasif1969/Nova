@@ -301,7 +301,7 @@ test('rapid reversal does not draw an obsolete asynchronously decoded forward fr
   assert.equal(p.live(), 0);
 });
 
-test('network/decode failure relinquishes canvas once for MP4 fallback', async () => {
+test('network/decode failure relinquishes canvas once for the static poster', async () => {
   const p = fixture({ fail: true });
   p.api.setProgress(.5, true); await p.tick();
   assert.equal(p.errors.length, 1);

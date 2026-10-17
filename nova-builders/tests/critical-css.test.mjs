@@ -85,7 +85,7 @@ test('restrained headline motion never hides first-paint text and refresh hooks 
 });
 
 test('hero styling preserves natural media colours with localized lighter shading', () => {
-  assert.match(inline, /\.hero-video \{ filter: none; \}/);
+  assert.doesNotMatch(inline, /hero-video/);
   assert.match(inline, /\.hero-poster \{ object-position: 50% 55%; filter: none; \}/);
   const wash = inline.match(/\.hero-wash \{([^}]+)\}/)[1];
   assert.match(wash, /rgba\(15,16,20,\.32\), transparent 70%/);

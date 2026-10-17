@@ -82,11 +82,9 @@ test('initial HTML keeps heavy media out of the critical load', async () => {
   assert.doesNotMatch(html, /fonts\.(googleapis|gstatic)\.com/);
   assert.doesNotMatch(html, /<script[^>]+three[^>]+>/);
   assert.doesNotMatch(html, /\.png["\s]/);
-  const video = html.match(/<video\b[^>]*>([\s\S]*?)<\/video>/);
-  assert.ok(video);
-  assert.match(video[0], /preload="none"/);
-  assert.doesNotMatch(video[0], /(?:\s|<)src="/);
-  assert.match(video[0], /data-src="\.\/assets\/nova-construction-v2-scrub\.mp4"/);
+  assert.doesNotMatch(html, /<video\b|\.mp4(?:["\s]|$)/);
+  const script = await readFile(resolve(root, 'script.js'), 'utf8');
+  assert.doesNotMatch(script, /hero-video|currentTime|requestVideoFrameCallback|\.mp4/);
   const hero = html.match(/<img class="hero-poster"[^>]*>/)[0];
   const preload = html.match(/<link rel="preload" as="image"[^>]*>/)[0];
   assert.doesNotMatch(hero, /loading="lazy"/);

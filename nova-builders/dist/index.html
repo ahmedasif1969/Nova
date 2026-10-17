@@ -66,7 +66,7 @@ button, input, textarea, select { font: inherit; }
 button { color: inherit; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
-img, video { display: block; max-width: 100%; }
+img { display: block; max-width: 100%; }
 button[hidden], [hidden] { display: none !important; }
 ::selection { color: var(--ink); background: var(--sand); }
 :focus-visible { outline: 2px solid var(--bronze); outline-offset: 5px; }
@@ -93,9 +93,8 @@ button[hidden], [hidden] { display: none !important; }
 .mobile-menu { display: none; }
 .hero { height: 320vh; height: 320svh; background: var(--ink); }
 .hero-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; color: var(--paper); }
-.hero-video, .hero-canvas, .hero-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hero-canvas, .hero-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .hero-canvas { pointer-events: none; }
-.hero-video { filter: none; }
 .hero-poster { object-position: 50% 55%; filter: none; }
 .hero-wash { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(15,16,20,.32), transparent 70%), linear-gradient(0deg, rgba(15,16,20,.55), transparent 58%, rgba(15,16,20,.14)); }
 .hero-copy { position: absolute; z-index: 2; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 130px var(--pad) 118px; text-align: center; }
@@ -253,9 +252,6 @@ button[hidden], [hidden] { display: none !important; }
   <main id="main-content" tabindex="-1">
     <section class="hero" id="top" data-hero>
       <div class="hero-sticky">
-        <video class="hero-video" muted playsinline preload="none" disablepictureinpicture aria-label="A luxury building taking shape as you scroll">
-          <source data-src="./assets/nova-construction-v2-scrub.mp4" type="video/mp4" />
-        </video>
         <canvas class="hero-canvas" hidden aria-hidden="true"></canvas>
         <img class="hero-poster" src="./assets/aurelian-1536.webp" srcset="./assets/aurelian-640.webp 640w, ./assets/aurelian-800.webp 800w, ./assets/aurelian-960.webp 960w, ./assets/aurelian-1536.webp 1536w" sizes="100vw" width="1536" height="1024" alt="" fetchpriority="high" aria-hidden="true" />
         <div class="hero-wash"></div>
