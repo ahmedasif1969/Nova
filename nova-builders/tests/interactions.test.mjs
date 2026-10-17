@@ -221,7 +221,7 @@ test('canvas is primary, copy follows painted frames and the poster cannot cover
   p.sequenceCallbacks.onDraw(.01, 3);
   assert.equal(p.nodes.get('.hero-poster').style.opacity, '0', 'Wait for actual frame zero');
   p.sequenceCallbacks.onDraw(0, 0);
-  assert.equal(p.nodes.get('.hero-poster').style.opacity, '1');
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0', 'Canvas frame zero replaces the poster');
   assert.equal(p.nodes.get('.hero-copy').style.opacity, '1');
   p.window.scrollY = 5000; await p.window.emit('scroll'); p.flush();
   assert.equal(p.sequenceCalls.at(-1).active, false);
@@ -232,6 +232,10 @@ test('opening buffer starts after the cover loads without waiting for page load'
   assert.ok(!p.sequenceCalls.some(call => call.preload));
   await p.nodes.get('.hero-poster').emit('load'); p.flush();
   assert.equal(p.sequenceCalls.filter(call => call.preload).length, 1);
+  p.sequenceCallbacks.onDraw(0, 0);
+  assert.equal(p.nodes.get('.hero-poster').style.opacity, '0', 'Warm-up uncovers frame zero before scrolling');
+  assert.equal(p.video.loads, 0);
+  assert.equal(p.video.seeks.length, 0);
   for (const options of [{ initialScroll: 5000 }, { reducedMotion: true }, { initialScroll: 400 }]) {
     const quiet = pageFixture({ ...options, sequenceLibrary: true });
     await quiet.nodes.get('.hero-poster').emit('load'); quiet.flush();

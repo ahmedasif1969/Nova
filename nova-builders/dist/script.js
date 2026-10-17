@@ -112,7 +112,6 @@
   let heroSequence = null;
   let sequenceStarted = false;
   let sequenceReady = false;
-  let sequenceFrame = -1;
   let displayedHeroProgress = 0;
   const clamp = value => Math.max(0, Math.min(1, value));
   const paintHeroCopy = p => {
@@ -125,14 +124,19 @@
     heroCopy.inert = copyOpacity < .05;
   };
   const syncHeroPoster = () => {
-    if (!(heroSequence ? sequenceReady : videoReady) || reducedMotion) posterOpacity = 1;
+    if (heroSequence && !reducedMotion) {
+      // Frame zero is painted during warm-up. Keep the poster only until
+      // canvas has real pixels, including after a return to the opening frame.
+      posterOpacity = sequenceReady ? 0 : 1;
+      heroPoster.style.opacity = String(posterOpacity);
+      return;
+    }
+    if (!videoReady || reducedMotion) posterOpacity = 1;
     else {
       // Once a real frame is ready, uncover it based on the user's scroll,
       // not on how many slow-to-download frames have already been painted.
       const requestedOpacity = 1 - clamp((heroProgress - .035) / .13);
-      const rewindComplete = heroSequence
-        ? heroProgress <= .035 && sequenceFrame === 0
-        : targetVideoTime < frameDuration * .5 && displayedVideoFrame === 0 && !video.seeking && !awaitingFrame;
+      const rewindComplete = targetVideoTime < frameDuration * .5 && displayedVideoFrame === 0 && !video.seeking && !awaitingFrame;
       // Scroll can reach the top before reverse decoding catches up. Keep the
       // video uncovered until the opening frame has actually completed its seek.
       // Preserve the initial forward fade and the cover on load/error.
@@ -264,7 +268,7 @@
         requestHeroVideo();
       }
       if (heroSequence) heroSequence.setProgress(clamp((p - .035) / .965), sequenceStarted && heroActive);
-      if (videoDuration) {
+      if (!heroSequence && videoDuration) {
         const videoProgress = clamp((p - .035) / .965);
         const lastFrameTime = Math.floor((videoDuration - .05) / frameDuration) * frameDuration;
         targetVideoTime = Math.min(lastFrameTime, Math.round(videoProgress * (videoDuration - .05) / frameDuration) * frameDuration);
@@ -322,7 +326,6 @@
         canvas: document.querySelector('.hero-canvas'),
         onDraw: (p, frame) => {
           sequenceReady = true;
-          sequenceFrame = frame;
           displayedHeroProgress = frame === 0 ? 0 : .035 + p * .965;
           paintHeroCopy(displayedHeroProgress);
           syncHeroPoster();

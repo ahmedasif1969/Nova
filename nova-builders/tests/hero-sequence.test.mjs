@@ -5,9 +5,9 @@ import { runInNewContext } from 'node:vm';
 import { createHash } from 'node:crypto';
 
 const source = await readFile(new URL('../dist/hero-sequence.js', import.meta.url), 'utf8');
-function fixture({ bootstrap = false, deferAdoption = false, mobile = false, deviceMemory = 8, slowDecode = false, saveData = false, blobSize = 200000, fail = false, width = mobile ? 390 : 1440, height = mobile ? 844 : 900, dpr = 3 } = {}) {
+function fixture({ bootstrap = false, deferAdoption = false, mobile = false, deviceMemory = 8, slowDecode = false, slowFetch = false, saveData = false, blobSize = 100000, fail = false, width = mobile ? 390 : 1440, height = mobile ? 844 : 900, dpr = 3 } = {}) {
   const frames = new Map(), requests = [], bitmaps = [], decodes = [];
-  const painted = [], errors = [];
+  const painted = [], errors = [], fetches = [], decodeOrder = [];
   let id = 0, time = 0, live = 0, peak = 0;
   const context = { drawImage(bitmap) { assert.equal(bitmap.closed, false); painted.push(bitmap.index); } };
   const canvas = { hidden: true, clientWidth: width, clientHeight: height, getContext: () => context };
@@ -22,7 +22,10 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
       close() { assert.equal(this.closed, false, 'Do not close a buffer twice'); this.closed = true; live--; } };
     bitmaps.push(image); return image;
   };
-  const decode = blob => slowDecode ? new Promise(resolve => decodes.push(() => resolve(bitmap(blob)))) : Promise.resolve(bitmap(blob));
+  const decode = blob => {
+    decodeOrder.push(blob.index);
+    return slowDecode ? new Promise(resolve => decodes.push(() => resolve(bitmap(blob)))) : Promise.resolve(bitmap(blob));
+  };
   const window = { createImageBitmap: decode, AbortController, devicePixelRatio: dpr, innerWidth: width, innerHeight: height,
     scrollY: 0, location: { hash: '' }, addEventListener() {},
     matchMedia: query => ({ matches: query.includes('max-width') && mobile }) };
@@ -30,7 +33,8 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
     createImageBitmap: decode,
     fetch: async (url, { signal }) => {
       requests.push({ url, signal });
-      return { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize }) };
+      const response = { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize }) };
+      return slowFetch ? new Promise(resolve => fetches.push(() => resolve(response))) : response;
     },
     requestAnimationFrame: callback => { frames.set(++id, callback); return id; },
     cancelAnimationFrame: id => frames.delete(id) });
@@ -45,20 +49,21 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
     await microtasks();
   };
   const settle = async () => { for (let i = 0; i < 500; i++) { await tick(); if (!frames.size && !api.stats().pending) return; } throw new Error('Sequence did not settle'); };
-  return { get api() { return api; }, adopt, canvas, context, document, requests, bitmaps, decodes, painted, errors, callbacks, frames, tick, settle, microtasks,
+  return { get api() { return api; }, adopt, canvas, context, document, requests, fetches, bitmaps, decodes, decodeOrder, painted, errors, callbacks, frames, tick, settle, microtasks,
     live: () => live, peak: () => peak };
 }
 
 test('early loader downloads before main adoption and reuses the same buffer', async () => {
   const p = fixture({ bootstrap: true, deferAdoption: true });
   await p.tick();
-  for (let i = 0; i < 10; i++) await p.microtasks();
-  assert.equal(p.requests.length, 12, 'No main script or window load event needed');
-  assert.equal(p.painted.length, 0);
+  for (let i = 0; i < 30; i++) await p.microtasks();
+  assert.equal(p.requests.length, 192, 'No scroll, main script or window load event needed');
+  assert.deepEqual(p.painted, [0], 'Warm-up paints the opening frame');
   const api = p.adopt();
   assert.equal(p.adopt(), api, 'Main must reuse the early instance');
   api.preload(); await p.microtasks();
-  assert.equal(p.requests.length, 12, 'No duplicate opening downloads');
+  assert.equal(p.requests.length, 192, 'No duplicate downloads');
+  assert.equal(p.callbacks[0].index, 0, 'Adoption reports the already-painted frame');
   api.setProgress(.1, true); await p.settle();
   assert.ok(p.callbacks.length > 0);
   api.destroy(); await p.microtasks();
@@ -99,26 +104,27 @@ test('decoded cache, decode concurrency and backing store stay bounded on deskto
       for (let i = 0; i < 80; i++) {
         await p.tick();
         assert.ok(p.api.stats().decoded <= p.api.stats().capacity);
-        assert.ok(p.api.stats().pending <= 2);
+        assert.ok(p.api.stats().pending <= p.api.stats().decodeConcurrency);
       }
     }
-    assert.ok(p.peak() <= p.api.stats().capacity + 2, 'Include transient decoding buffers in the bound');
+    assert.ok(p.peak() <= p.api.stats().capacity + p.api.stats().decodeConcurrency, 'Include transient decoding buffers in the bound');
     assert.ok(p.canvas.width * p.canvas.height <= (options.deviceMemory === 4 ? 2000000 : 4000000), 'Backing store respects the device pixel budget');
-    assert.equal(p.api.stats().capacity, options.deviceMemory === 4 ? 8 : options.mobile ? 10 : 12);
+    assert.equal(p.api.stats().capacity, options.deviceMemory === 4 ? 10 : 12);
     assert.ok(p.requests.every(request => request.url.includes('/desktop/')), 'Phones also download the original-resolution frames');
     p.api.destroy(); await p.microtasks();
     assert.equal(p.live(), 0);
   }
 });
 
-test('opening buffer warms without drawing or downloading the entire clip', async () => {
+test('warm-up paints zero and retains the full compressed clip without decoding every frame', async () => {
   for (const options of [{}, { mobile: true }, { deviceMemory: 4 }]) {
     const p = fixture(options);
     p.api.preload();
     for (let i = 0; i < 30; i++) await p.microtasks();
-    assert.equal(p.requests.length, options.deviceMemory === 4 ? 8 : 12);
-    assert.equal(p.painted.length, 0);
-    assert.equal(p.canvas.hidden, true);
+    assert.equal(p.requests.length, 192);
+    assert.equal(p.api.stats().compressed, 192);
+    assert.deepEqual(p.painted, [0]);
+    assert.equal(p.canvas.hidden, false);
     assert.ok(p.api.stats().decoded <= p.api.stats().capacity);
     const requests = p.requests.length;
     p.api.setProgress(0, true); await p.tick();
@@ -132,16 +138,17 @@ test('opening buffer warms without drawing or downloading the entire clip', asyn
   assert.equal(hidden.requests.length, 0);
 });
 
-test('network runs ahead independently of two slow decodes with bounded compressed storage', async () => {
+test('full sequence downloads independently of occupied decoders with bounded compressed storage', async () => {
   for (const options of [{}, { mobile: true }, { deviceMemory: 4 }]) {
     const p = fixture({ ...options, slowDecode: true });
     p.api.setProgress(.5, true); await p.tick();
     for (let i = 0; i < 30; i++) await p.microtasks();
     const stats = p.api.stats();
-    assert.equal(stats.downloadAhead, options.deviceMemory === 4 ? 16 : options.mobile ? 32 : 48);
-    assert.equal(stats.downloadConcurrency, options.deviceMemory === 4 ? 2 : 4);
-    assert.equal(p.decodes.length, 2);
-    assert.ok(p.requests.length >= stats.downloadAhead, 'Downloads continue while decoders are occupied');
+    assert.equal(stats.decodeAhead, options.deviceMemory === 4 ? 6 : 8);
+    assert.equal(stats.downloadConcurrency, options.deviceMemory === 4 ? 3 : 4);
+    assert.equal(p.decodes.length, options.deviceMemory === 4 || options.mobile ? 2 : 3);
+    assert.equal(p.requests.length, 192, 'Downloads continue while decoders are occupied');
+    assert.equal(stats.compressed, 192);
     assert.ok(stats.compressedBytes <= stats.compressedLimit);
     p.api.destroy(); p.decodes.splice(0).forEach(done => done()); await p.microtasks();
     assert.equal(p.live(), 0); assert.equal(p.api.stats().compressedBytes, 0);
@@ -159,19 +166,80 @@ test('compressed byte eviction does not continuously redownload speculative fram
   p.api.destroy(); await p.microtasks();
 });
 
-test('phone canvas preserves 2x/3x pixel dimensions after rotation', async () => {
+test('slow downloads stay bounded and continue offscreen without aborting or refetching', async () => {
+  for (const deviceMemory of [8, 4]) {
+    const p = fixture({ deviceMemory, slowFetch: true });
+    p.api.preload();
+    const limit = deviceMemory === 4 ? 3 : 4;
+    assert.equal(p.requests.length, limit);
+    p.api.setProgress(1, true); await p.tick();
+    assert.equal(p.requests.length, limit, 'Direction changes do not exceed network concurrency');
+    assert.ok(p.requests.every(r => !r.signal.aborted));
+    p.fetches.splice(0).forEach(done => done()); await p.microtasks();
+    assert.ok(p.requests[limit].url.endsWith('frame-004.webp'), 'The imminent frame goes ahead of the background queue');
+    p.api.setProgress(1, false);
+    for (let i = 0; i < 70; i++) {
+      p.fetches.splice(0).forEach(done => done()); await p.microtasks();
+      assert.ok(p.api.stats().downloading <= limit);
+    }
+    assert.equal(p.requests.length, 192);
+    assert.equal(new Set(p.requests.map(r => r.url)).size, 192);
+    assert.ok(p.requests.every(r => !r.signal.aborted));
+    assert.equal(p.api.stats().compressed, 192);
+    assert.equal(p.live(), 0, 'Offscreen background work retains no decoded buffers');
+    p.api.setProgress(0, true); await p.settle();
+    p.api.setProgress(1, true); await p.settle();
+    assert.equal(p.requests.length, 192, 'Replay and reversal reuse all downloaded blobs');
+    p.api.destroy(); await p.microtasks();
+  }
+});
+
+test('hidden tabs finish in-flight downloads, retain blobs and resume without a restart', async () => {
+  const p = fixture({ slowFetch: true });
+  p.api.preload();
+  p.document.hidden = true;
+  p.api.suspendPreload();
+  p.fetches.splice(0).forEach(done => done()); await p.microtasks();
+  assert.equal(p.requests.length, 4, 'Do not start new downloads in a hidden tab');
+  assert.equal(p.api.stats().compressed, 4);
+  assert.ok(p.requests.every(r => !r.signal.aborted));
+  p.document.hidden = false;
+  p.api.preload();
+  for (let i = 0; i < 60; i++) {
+    p.fetches.splice(0).forEach(done => done()); await p.microtasks();
+  }
+  assert.equal(p.requests.length, 192);
+  assert.equal(new Set(p.requests.map(r => r.url)).size, 192);
+  assert.equal(p.api.stats().displayed, 0);
+  p.api.destroy(); await p.microtasks();
+});
+
+test('decoders prepare the next eased paint steps before intervening source frames', async () => {
+  const p = fixture({ slowDecode: true });
+  p.api.setProgress(1, true); await p.tick();
+  for (let i = 0; i < 3; i++) {
+    p.decodes.splice(0).forEach(done => done()); await p.microtasks();
+  }
+  assert.deepEqual(p.decodeOrder.slice(0, 8), [4, 8, 12, 16, 20, 24, 28, 32]);
+  assert.ok(!p.decodeOrder.includes(191), 'Do not decode the distant target ahead of upcoming paint steps');
+  p.api.destroy();
+  p.decodes.splice(0).forEach(done => done()); await p.microtasks();
+  assert.equal(p.live(), 0);
+});
+
+test('phone canvas caps 2x/3x displays at 1.5x after rotation', async () => {
   for (const dpr of [2, 3]) {
     const p = fixture({ mobile: true, dpr });
     p.api.setProgress(.5, true); await p.settle();
-    assert.equal(p.canvas.width, 390 * dpr);
-    assert.equal(p.canvas.height, 844 * dpr);
+    assert.equal(p.canvas.width, 390 * 1.5);
+    assert.equal(p.canvas.height, 844 * 1.5);
     assert.equal(p.context.imageSmoothingEnabled, true);
     assert.equal(p.context.imageSmoothingQuality, 'high');
     const frame = p.api.stats().displayed;
     p.canvas.clientWidth = 844; p.canvas.clientHeight = 390;
     p.api.resize();
-    assert.equal(p.canvas.width, 844 * dpr);
-    assert.equal(p.canvas.height, 390 * dpr);
+    assert.equal(p.canvas.width, 844 * 1.5);
+    assert.equal(p.canvas.height, 390 * 1.5);
     assert.equal(p.api.stats().displayed, frame);
     assert.equal(p.canvas.hidden, false);
     p.api.destroy(); await p.microtasks();
@@ -189,28 +257,34 @@ test('exact half-frame targets settle from either direction without an idle redr
   p.api.destroy(); await p.microtasks();
 });
 
-test('offscreen/hidden suspension releases images and closes late decodes without resurrecting work', async () => {
+test('leaving the hero retains downloads, while hidden tabs release late decoded images', async () => {
   const p = fixture({ slowDecode: true });
   p.api.setProgress(.9, true); await p.tick();
-  assert.equal(p.decodes.length, 2);
-  p.api.setProgress(0, false);
-  const stoppedRequests = p.requests.length;
+  assert.equal(p.decodes.length, 3);
+  p.api.setProgress(1, false);
   p.decodes.splice(0).forEach(complete => complete()); await p.microtasks();
+  for (let i = 0; i < 30; i++) await p.microtasks();
   assert.equal(p.live(), 0);
   assert.equal(p.api.stats().pending, 0);
   assert.equal(p.frames.size, 0);
   assert.equal(p.api.stats().downloading, 0);
-  assert.equal(p.requests.length, stoppedRequests, 'Suspension must stop background downloads');
+  assert.equal(p.requests.length, 192, 'Offscreen warm-up completes');
+  assert.equal(p.api.stats().compressed, 192);
+  assert.ok(p.requests.every(r => !r.signal.aborted), 'Leaving the hero must not abort downloads');
+  const requests = p.requests.length;
   p.api.setProgress(0, true); await p.tick();
   for (let i = 0; i < 5 && p.api.stats().displayed !== 0; i++) {
     p.decodes.splice(0).forEach(complete => complete()); await p.microtasks(); await p.tick();
   }
   assert.equal(p.api.stats().displayed, 0);
+  assert.equal(p.requests.length, requests, 'Return and reversal reuse compressed data');
   p.document.hidden = true;
   p.api.setProgress(.5, true);
   p.decodes.splice(0).forEach(complete => complete()); await p.microtasks();
   assert.equal(p.live(), 0);
   assert.equal(p.frames.size, 0);
+  assert.equal(p.api.stats().compressed, 192);
+  p.api.destroy(); await p.microtasks();
 });
 
 test('rapid reversal does not draw an obsolete asynchronously decoded forward frame', async () => {
@@ -246,7 +320,7 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
   assert.equal(p.canvas.hidden, false);
   assert.equal(p.canvas.width, width, 'Do not clear retained pixels without a replacement');
   p.api.setProgress(.3, true); await p.settle();
-  assert.equal(p.canvas.width, 1686);
+  assert.equal(p.canvas.width, 960);
   assert.equal(p.api.stats().displayed, Math.round(.3 * 191));
   p.api.destroy(); await p.microtasks();
 });
