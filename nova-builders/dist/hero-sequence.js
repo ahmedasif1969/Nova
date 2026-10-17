@@ -33,7 +33,7 @@
     let width = 0, height = 0, resizeNeeded = true;
     const bounded = value => Math.max(0, Math.min(lastFrame, value));
     const easedPosition = (cursor, destination, elapsed) => bounded(cursor +
-      Math.max(-4, Math.min(4, (destination - cursor) * (1 - Math.exp(-elapsed / 100)))));
+      Math.max(-1, Math.min(1, (destination - cursor) * (1 - Math.exp(-elapsed / 100)))));
     const releaseDecoded = () => {
       generation++;
       warming = false;
@@ -201,7 +201,9 @@
       previousTick = now;
       const gap = target - position;
       if (gap) direction = gap > 0 ? 1 : -1;
-      const nextPosition = easedPosition(position, target, elapsed);
+      // Start with frame zero even if scrolling beats warm-up, then present
+      // every adjacent frame. A missing frame holds the timeline here.
+      const nextPosition = displayed < 0 ? 0 : easedPosition(position, target, elapsed);
       const next = Math.round(nextPosition);
       plan(next, nextPosition);
       // Never advance the virtual timeline while its frame is missing. Last

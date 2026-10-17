@@ -84,7 +84,7 @@ test('sequence is lazy, renders all the way forward and reverse, and stops witho
   assert.equal(p.requests.length, 0);
   p.api.setProgress(1, true); await p.settle();
   assert.equal(p.api.stats().displayed, 191);
-  for (let i = 1; i < p.painted.length; i++) assert.ok(p.painted[i] - p.painted[i - 1] <= 4, 'Catch-up draws remain bounded');
+  assert.deepEqual(p.painted, Array.from({ length: 192 }, (_, index) => index), 'A cold jump must paint every frame from zero');
   assert.equal(p.canvas.hidden, false);
   const count = p.painted.length;
   for (let i = 0; i < 10; i++) await p.tick();
@@ -92,7 +92,7 @@ test('sequence is lazy, renders all the way forward and reverse, and stops witho
   p.api.setProgress(0, true); await p.settle();
   assert.equal(p.api.stats().displayed, 0);
   const reverse = p.painted.slice(count);
-  for (let i = 1; i < reverse.length; i++) assert.ok(reverse[i] <= reverse[i - 1]);
+  assert.deepEqual(reverse, Array.from({ length: 191 }, (_, index) => 190 - index), 'Reverse playback must paint every adjacent frame');
   assert.equal(p.frames.size, 0);
 });
 
@@ -176,7 +176,7 @@ test('slow downloads stay bounded and continue offscreen without aborting or ref
     assert.equal(p.requests.length, limit, 'Direction changes do not exceed network concurrency');
     assert.ok(p.requests.every(r => !r.signal.aborted));
     p.fetches.splice(0).forEach(done => done()); await p.microtasks();
-    assert.ok(p.requests[limit].url.endsWith('frame-004.webp'), 'The imminent frame goes ahead of the background queue');
+    assert.ok(p.requests[limit].url.endsWith(`frame-${String(limit).padStart(3, '0')}.webp`), 'The next missing frame follows the already in-flight opening frames');
     p.api.setProgress(1, false);
     for (let i = 0; i < 70; i++) {
       p.fetches.splice(0).forEach(done => done()); await p.microtasks();
@@ -214,13 +214,13 @@ test('hidden tabs finish in-flight downloads, retain blobs and resume without a 
   p.api.destroy(); await p.microtasks();
 });
 
-test('decoders prepare the next eased paint steps before intervening source frames', async () => {
+test('decoders prepare consecutive frames from the displayed position before the distant target', async () => {
   const p = fixture({ slowDecode: true });
   p.api.setProgress(1, true); await p.tick();
   for (let i = 0; i < 3; i++) {
     p.decodes.splice(0).forEach(done => done()); await p.microtasks();
   }
-  assert.deepEqual(p.decodeOrder.slice(0, 8), [4, 8, 12, 16, 20, 24, 28, 32]);
+  assert.deepEqual(p.decodeOrder.slice(0, 8), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.ok(!p.decodeOrder.includes(191), 'Do not decode the distant target ahead of upcoming paint steps');
   p.api.destroy();
   p.decodes.splice(0).forEach(done => done()); await p.microtasks();
