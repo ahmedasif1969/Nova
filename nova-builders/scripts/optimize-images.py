@@ -26,3 +26,13 @@ for name in ("aurelian", "vela", "meridian", "aurelian-daylight", "residence-int
                     output, "WEBP", quality=quality, method=6
                 )
                 print(f"{output.name}: {output.stat().st_size:,} bytes (quality {quality})")
+
+        # At a roughly 375 CSS-pixel phone width, a 2x screen needs about
+        # 750 pixels. Give it an 800px source instead of the 960px desktop one.
+        if name in ("aurelian", "aurelian-daylight", "vela", "meridian"):
+            prefix = name if name == "aurelian" else f"{name}-detail"
+            output = assets / f"{prefix}-800.webp"
+            image.resize((800, 533), Image.Resampling.LANCZOS).save(
+                output, "WEBP", quality=72 if name == "aurelian" else 80, method=6
+            )
+            print(f"{output.name}: {output.stat().st_size:,} bytes")
