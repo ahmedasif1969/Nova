@@ -9,7 +9,14 @@
       "height": 720,
       "quality": 65,
       "bytes": 17554384
+    },
+    {
+      "name": "mobile-portrait",
+      "width": 512,
+      "height": 720,
+      "quality": 65,
+      "bytes": 9156902
     }
   ],
-  "note": "All source frames at native resolution, lossy WebP quality 65. Original MP4s and prior frame sets preserved."
+  "note": "Desktop uses native 1280x720 frames. Mobile portrait frames crop the original 512x720 center without resizing. Both use lossy WebP quality 65; original MP4s are preserved."
 }

@@ -18,7 +18,7 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
   }
   const bitmap = blob => {
     live++; peak = Math.max(peak, live);
-    const image = { index: blob.index, width: 1344, height: 768, closed: false,
+    const image = { index: blob.index, width: blob.mobilePortrait ? 512 : 1280, height: 720, closed: false,
       close() { assert.equal(this.closed, false, 'Do not close a buffer twice'); this.closed = true; live--; } };
     bitmaps.push(image); return image;
   };
@@ -33,7 +33,7 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
     createImageBitmap: decode,
     fetch: async (url, { signal }) => {
       requests.push({ url, signal });
-      const response = { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize }) };
+      const response = { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize, mobilePortrait: url.includes('/mobile-portrait/') }) };
       return slowFetch ? new Promise(resolve => fetches.push(() => resolve(response))) : response;
     },
     requestAnimationFrame: callback => { frames.set(++id, callback); return id; },
@@ -110,7 +110,8 @@ test('decoded cache, decode concurrency and backing store stay bounded on deskto
     assert.ok(p.peak() <= p.api.stats().capacity + p.api.stats().decodeConcurrency, 'Include transient decoding buffers in the bound');
     assert.ok(p.canvas.width * p.canvas.height <= (options.deviceMemory === 4 ? 2000000 : 4000000), 'Backing store respects the device pixel budget');
     assert.equal(p.api.stats().capacity, options.deviceMemory === 4 ? 10 : 12);
-    assert.ok(p.requests.every(request => request.url.includes('/desktop/')), 'Phones also download the original-resolution frames');
+    const variant = options.mobile ? 'mobile-portrait' : 'desktop';
+    assert.ok(p.requests.every(request => request.url.includes(`/${variant}/`)), 'Each device downloads only its selected frames');
     p.api.destroy(); await p.microtasks();
     assert.equal(p.live(), 0);
   }
@@ -238,9 +239,19 @@ test('phone canvas caps 2x/3x displays at 1.5x after rotation', async () => {
     const frame = p.api.stats().displayed;
     p.canvas.clientWidth = 844; p.canvas.clientHeight = 390;
     p.api.resize();
+    await p.settle();
     assert.equal(p.canvas.width, 844 * 1.5);
     assert.equal(p.canvas.height, 390 * 1.5);
     assert.equal(p.api.stats().displayed, frame);
+    assert.equal(p.api.stats().variant, 'desktop');
+    assert.ok(p.requests.some(request => request.url.includes('/mobile-portrait/')));
+    assert.ok(p.requests.some(request => request.url.includes('/desktop/')));
+    p.canvas.clientWidth = 390; p.canvas.clientHeight = 844;
+    p.api.resize();
+    await p.settle();
+    assert.equal(p.api.stats().variant, 'mobile-portrait');
+    assert.equal(p.api.stats().displayed, frame);
+    assert.equal(p.canvas.width, 390 * 1.5);
     assert.equal(p.canvas.hidden, false);
     p.api.destroy(); await p.microtasks();
     assert.equal(p.live(), 0);
@@ -325,7 +336,7 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
   p.api.destroy(); await p.microtasks();
 });
 
-test('active sequence contains all 192 new source frames and the previous original is preserved', async () => {
+test('both active sequences contain all 192 frames and the previous original is preserved', async () => {
   const root = new URL('../dist/assets/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('hero-frames-q65/manifest.json', root), 'utf8'));
   assert.equal(manifest.frameCount, 192);
@@ -334,7 +345,7 @@ test('active sequence contains all 192 new source frames and the previous origin
   const replacement = await readFile(new URL(manifest.source, root));
   assert.equal(createHash('sha256').update(replacement).digest('hex'), '9ba8c3aa0a6233cc14924a2cbfb91c3a10411e88112054c0783b9de2ed8b1c08');
   for (const variant of manifest.variants) {
-    assert.equal(variant.width, 1280);
+    assert.equal(variant.width, variant.name === 'desktop' ? 1280 : 512);
     assert.equal(variant.height, 720);
     assert.equal(variant.quality, 65);
     const folder = new URL(`hero-frames-q65/${variant.name}/`, root);
@@ -354,10 +365,13 @@ test('active sequence contains all 192 new source frames and the previous origin
     }
     assert.equal(total, variant.bytes);
     const previous = JSON.parse(await readFile(new URL('hero-frames-v3/manifest.json', root), 'utf8'));
-    assert.ok(total < previous.variants[0].bytes * .95, 'Stronger compression reduces transfer at unchanged resolution');
+    assert.ok(total < previous.variants[0].bytes * .95, 'Current assets reduce transfer');
     const checkpoint = JSON.parse(await readFile(new URL('hero-frames-v2/manifest.json', root), 'utf8'));
-    assert.ok(total < checkpoint.variants[0].bytes * .6, 'Compression saves at least 40% without resizing or dropping frames');
+    assert.ok(total < checkpoint.variants[0].bytes * .6, 'Current assets save at least 40% without dropping frames');
   }
+  assert.ok(manifest.variants.find(variant => variant.name === 'mobile-portrait').bytes <
+    manifest.variants.find(variant => variant.name === 'desktop').bytes * .6,
+  'Portrait frames save at least 40% of hero downloads');
   const original = await readFile(new URL('nova-construction.mp4', root));
   assert.equal(createHash('sha256').update(original).digest('hex'), '9e22851da39ac9eaca20594f562a1f5dc17d536d25c230b8be81d6436db6ada1');
 });

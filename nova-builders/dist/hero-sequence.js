@@ -19,9 +19,12 @@
     const compressedLimit = 24 * 1024 * 1024;
     const compressed = new Map(), downloads = new Map(), failed = new Set(), fetched = new Set();
     let compressedBytes = 0, downloadWanted = [], warming = false, prefetching = false;
-    // Share original-resolution frames across devices. The smaller archive
-    // softens fine building details on high-density phone displays.
-    const variant = 'desktop';
+    // The phone crop keeps the same source pixels visible under center-cover.
+    // Wide screens keep the complete source image.
+    const chooseVariant = () => (canvas.clientWidth || window.innerWidth) <= 640 &&
+      (canvas.clientWidth || window.innerWidth) / (canvas.clientHeight || window.innerHeight) <= 512 / 720
+      ? 'mobile-portrait' : 'desktop';
+    let variant = chooseVariant();
     const maxCanvasPixels = lowMemory ? 2000000 : 4000000;
     const lastFrame = 191;
     const allFrames = Array.from({ length: lastFrame + 1 }, (_, index) => index);
@@ -30,7 +33,7 @@
     let active = false, destroyed = false;
     let target = 0, position = 0, displayed = -1, direction = 1;
     let raf = 0, previousTick = 0, generation = 0, wanted = [];
-    let width = 0, height = 0, resizeNeeded = true;
+    let width = 0, height = 0, resizeNeeded = true, variantSwitch = false;
     const bounded = value => Math.max(0, Math.min(lastFrame, value));
     const easedPosition = (cursor, destination, elapsed) => bounded(cursor +
       Math.max(-1, Math.min(1, (destination - cursor) * (1 - Math.exp(-elapsed / 100)))));
@@ -79,6 +82,24 @@
       context.imageSmoothingQuality = 'high';
     }
     const resize = () => {
+      const nextVariant = chooseVariant();
+      if (nextVariant !== variant) {
+        variant = nextVariant;
+        downloads.forEach(controller => controller.abort());
+        releaseDecoded();
+        compressed.clear(); compressedBytes = 0;
+        fetched.clear(); failed.clear();
+        displayed = -1;
+        variantSwitch = true;
+        resizeNeeded = true;
+        previousTick = 0;
+        if (active) { plan(Math.round(position)); schedule(); }
+        else if (prefetching) {
+          downloadWanted = allFrames;
+          pump();
+        }
+        return;
+      }
       // Defer clearing the canvas until a bitmap can replace its pixels. This
       // preserves the last painted frame across offscreen/orientation changes.
       resizeNeeded = true;
@@ -203,12 +224,13 @@
       if (gap) direction = gap > 0 ? 1 : -1;
       // Start with frame zero even if scrolling beats warm-up, then present
       // every adjacent frame. A missing frame holds the timeline here.
-      const nextPosition = displayed < 0 ? 0 : easedPosition(position, target, elapsed);
+      const nextPosition = displayed < 0 ? (variantSwitch ? position : 0) : easedPosition(position, target, elapsed);
       const next = Math.round(nextPosition);
       plan(next, nextPosition);
       // Never advance the virtual timeline while its frame is missing. Last
       // painted pixels remain visible, and decoding wakes this loop again.
       if (!draw(next)) { previousTick = 0; return; }
+      variantSwitch = false;
       position = nextPosition;
       if (displayed === Math.round(target)) {
         position = target;
