@@ -91,7 +91,7 @@ button[hidden], [hidden] { display: none !important; }
 .menu-toggle { display: none; width: 44px; height: 44px; padding: 10px; border: 0; background: transparent; }
 .menu-toggle span { display: block; height: 1px; background: currentColor; margin: 7px 0; transition: transform .3s; }
 .mobile-menu { display: none; }
-.hero { height: 320vh; height: 320svh; background: var(--ink); }
+.hero { height: 600vh; height: 600svh; background: var(--ink); }
 .hero-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; color: var(--paper); }
 .hero-canvas, .hero-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .hero-canvas { pointer-events: none; }
@@ -102,7 +102,12 @@ button[hidden], [hidden] { display: none !important; }
 .status-dot { width: 5px; height: 5px; display: inline-block; flex-shrink: 0; border-radius: 50%; background: var(--sand); box-shadow: 0 0 0 4px rgba(217,203,180,.12); }
 .hero h1 { width: 100%; max-width: 86rem; margin: 0; color: #f3f0eb; font: 400 clamp(4rem,7.8vw,8.75rem)/.96 var(--display); letter-spacing: -.042em; text-shadow: 0 2px 16px rgba(0,0,0,.28); }
 .hero h1 > span { display: block; }
-.hero h1 em { color: #c9b9d7; font-weight: 400; }
+.hero-chapter h2 em, .hero h1 em { color: #c9b9d7; font-weight: 400; }
+.hero-story { position: absolute; z-index: 2; left: var(--pad); right: var(--pad); bottom: clamp(116px, 19vh, 220px); pointer-events: none; }
+.hero-chapter { max-width: 46rem; text-shadow: 0 2px 20px rgba(0,0,0,.5); }
+.hero-chapter h2 { margin: 0; font: 400 clamp(2.8rem, 5.2vw, 5.6rem)/1.02 var(--display); letter-spacing: -.035em; }
+.hero-chapter p { max-width: 34ch; margin: 1.3rem 0 0; font-size: clamp(.85rem, 1.1vw, 1rem); line-height: 1.75; color: #f3f0eb; }
+.hero-chapter .text-link { margin-top: 1.2rem; pointer-events: auto; color: var(--paper); }
 .hero-bottom { display: flex; align-items: center; justify-content: center; gap: 3rem; margin-top: 2rem; }
 .hero-intro > p { margin: 0 auto 1.8rem; max-width: 460px; font-size: 1rem; line-height: 1.8; color: #f3f0eb; text-shadow: 0 1px 12px rgba(0,0,0,.4); }
 .hero-actions { display: flex; align-items: center; justify-content: center; gap: 1rem; }
@@ -164,7 +169,10 @@ button[hidden], [hidden] { display: none !important; }
 .hero-feature { display: none; }
 .hero-scroll { top: auto; bottom: 128px; } }
 @media (max-width: 640px) { :root { --pad: 1.5rem; }
-.hero { height: 270vh; height: 270svh; }
+.hero { height: 640vh; height: 640svh; }
+.hero-story { bottom: 132px; }
+.hero-chapter h2 { font-size: clamp(1.9rem, 8.5vw, 3rem); }
+.hero-chapter p { max-width: 30ch; margin-top: 1rem; font-size: .85rem; }
 .hero-copy { padding-bottom: 116px; }
 .hero h1 { font-size: clamp(1.9rem,7.8vw,3.12rem); line-height: 1.1; letter-spacing: -.038em; }
 .hero h1 > span { white-space: nowrap; }
@@ -194,7 +202,11 @@ button[hidden], [hidden] { display: none !important; }
 .eyebrow { margin-bottom: .8rem; }
 .hero-bottom { margin-top: 1rem; }
 .hero-intro > p { margin-bottom: 1rem; } }
-@media (max-height: 520px) and (min-width: 641px) { .hero-copy { padding-top: 90px; padding-bottom: 70px; }
+@media (max-height: 520px) and (min-width: 641px) { .hero-story { bottom: 84px; }
+.hero-chapter h2 { font-size: clamp(1.6rem, 3.5vw, 2.6rem); }
+.hero-chapter p { margin-top: .6rem; font-size: .75rem; }
+.hero-chapter .text-link { margin-top: .5rem; }
+.hero-copy { padding-top: 90px; padding-bottom: 70px; }
 .hero h1 { font-size: clamp(2.4rem,5.6vw,4rem); }
 .eyebrow, .hero-feature, .hero-intro > p, .hero-scroll { display: none; }
 .hero-bottom { margin-top: 1rem; }
@@ -266,6 +278,21 @@ button[hidden], [hidden] { display: none !important; }
                 <a class="button button-outline" href="#consultation">Book a consultation <span aria-hidden="true">↗</span></a>
               </div>
             </div>
+          </div>
+        </div>
+        <div class="hero-story" data-hero-story hidden>
+          <div class="hero-chapter" data-hero-chapter hidden>
+            <h2>From the ground.<br/><em>With purpose.</em></h2>
+            <p>A clear vision becomes a structure, one considered step at a time.</p>
+          </div>
+          <div class="hero-chapter" data-hero-chapter hidden>
+            <h2>Every floor.<br/><em>Thoughtfully made.</em></h2>
+            <p>Light, proportion and space come together to shape the way we live.</p>
+          </div>
+          <div class="hero-chapter" data-hero-chapter hidden>
+            <h2>A new landmark.<br/><em>A place to belong.</em></h2>
+            <p>Discover the ideas behind our collection of imagined residences.</p>
+            <a class="text-link" href="#projects">Explore the collection <span aria-hidden="true">↗</span></a>
           </div>
         </div>
         <div class="hero-timeline" aria-hidden="true">

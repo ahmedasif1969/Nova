@@ -52,6 +52,10 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   }
   const selectors = ['[data-header]', '.progress span', '[data-menu-toggle]', '[data-mobile-menu]', '[data-consultation-form]', '[data-project-dialog]', '[data-hero]', '.hero-poster', '.hero-copy', '[data-build-progress]', '[data-build-phase]', '[data-project-count]', '.project-list', '[data-dialog-title]', '[data-dialog-location]', '[data-dialog-description]', '[data-dialog-status]', '[data-dialog-image]', '[data-dialog-specs]', '[data-dialog-features]', '[data-dialog-close]', '[data-dialog-enquire]', '[data-enquiry-result]', '#enquiry-draft', '[data-form-note]', '[data-copy-enquiry]', '#building-model', '.model-stage', '[data-model-hint]', '#top', '#legacy', '#projects', '#approach', '#model-study', '#consultation'];
   selectors.forEach(selector => nodes.set(selector, new Element()));
+  const heroStory = new Element(); heroStory.hidden = true;
+  const heroChapters = Array.from({ length: 3 }, () => { const panel = new Element(); panel.hidden = true; return panel; });
+  nodes.set('[data-hero-story]', heroStory);
+  groups.set('[data-hero-chapter]', heroChapters);
   document = new Element();
   document.body = new Element();
   document.head = new Element();
@@ -171,7 +175,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
     for (const [id, timer] of [...timers]) if (timer.at <= clock) { timers.delete(id); timer.callback(); }
   };
   const flush = (milliseconds = 1000 / 60) => { advance(milliseconds); const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(clock)); };
-  return { nodes, filters, cards, projects, materials, materialAccordion, marquee, marqueeTrack, marqueeToggle, paragraph, motionCalls, mediaRegistrations, pins, window, document, observers, frames, timers, flush, advance, sequenceCallbacks, sequenceCalls, clipboard: () => clipboard };
+  return { nodes, heroStory, heroChapters, filters, cards, projects, materials, materialAccordion, marquee, marqueeTrack, marqueeToggle, paragraph, motionCalls, mediaRegistrations, pins, window, document, observers, frames, timers, flush, advance, sequenceCallbacks, sequenceCalls, clipboard: () => clipboard };
 }
 
 test('canvas is primary, copy follows painted frames and the poster cannot cover reverse catch-up', async () => {
@@ -219,6 +223,37 @@ test('cold first frame uncovers construction without waiting for 26 painted fram
   assert.equal(p.nodes.get('[data-build-phase]').textContent, 'The vision');
 });
 
+test('hero chapters follow painted frames, reverse with the building, and disappear on failure', async () => {
+  const p = pageFixture({ sequenceLibrary: true });
+  p.window.scrollY = 1800; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.heroStory.hidden, true, 'A distant scroll target must not advance the copy before its frame');
+  for (const [progress, chapter] of [[.35, 0], [.65, 1], [.9, 2], [.65, 1], [.35, 0]]) {
+    p.sequenceCallbacks.onDraw(progress, Math.round(progress * 191));
+    assert.equal(p.heroStory.hidden, false);
+    assert.deepEqual(p.heroChapters.map(panel => panel.hidden), [0, 1, 2].map(index => index !== chapter));
+    assert.equal(p.heroChapters[chapter].style.opacity, '1');
+    assert.equal(p.nodes.get('.hero-copy').style.opacity, '0');
+  }
+  p.sequenceCallbacks.onDraw(0, 0);
+  assert.equal(p.heroStory.hidden, true);
+  assert.equal(p.nodes.get('.hero-copy').style.opacity, '1');
+  p.sequenceCallbacks.onDraw(.9, 172);
+  p.sequenceCallbacks.onError(new Error('Canvas failed'));
+  assert.equal(p.heroStory.hidden, true);
+  assert.ok(p.heroChapters.every(panel => panel.hidden));
+});
+
+test('hero requests its final frame with scrolling space left before the sticky section ends', async () => {
+  const p = pageFixture({ sequenceLibrary: true });
+  // Fixture hero is 3000px tall with a 1000px viewport: 2000px sticky travel.
+  p.window.scrollY = 1640; await p.window.emit('scroll'); p.flush();
+  assert.equal(p.sequenceCalls.at(-1).p, 1);
+  assert.equal(p.sequenceCalls.at(-1).active, true);
+  assert.ok(p.window.scrollY < 2000);
+  p.window.scrollY = 820; await p.window.emit('scroll'); p.flush();
+  assert.ok(p.sequenceCalls.at(-1).p > .4 && p.sequenceCalls.at(-1).p < .6);
+});
+
 test('canvas failure restores a static poster immediately and keeps it on subsequent scrolls', async () => {
   const p = pageFixture({ sequenceLibrary: true });
   p.sequenceCallbacks.onDraw(.8, 153);
@@ -243,6 +278,7 @@ test('missing canvas support and reduced motion retain the still hero through sc
       p.document.hidden = false; await p.document.emit('visibilitychange'); p.flush();
       assert.equal(p.nodes.get('.hero-poster').style.opacity ?? '1', '1');
       assert.ok(p.sequenceCalls.every(call => !call.active));
+      assert.equal(p.heroStory.hidden, true);
     }
   }
 });

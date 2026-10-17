@@ -85,6 +85,8 @@
   const hero = document.querySelector('[data-hero]');
   const heroPoster = document.querySelector('.hero-poster');
   const heroCopy = document.querySelector('.hero-copy');
+  const heroStory = document.querySelector('[data-hero-story]');
+  const heroChapters = [...document.querySelectorAll('[data-hero-chapter]')];
   const buildProgress = document.querySelector('[data-build-progress]');
   const buildPhase = document.querySelector('[data-build-phase]');
   let scrollFrame = 0;
@@ -94,11 +96,24 @@
   let sequenceStarted = false;
   let sequenceReady = false;
   const clamp = value => Math.max(0, Math.min(1, value));
+  // Finish the requested sequence before the sticky section ends, leaving
+  // scrolling room for catch-up and a readable final chapter.
+  const sequenceProgress = p => clamp((p - .035) / (.82 - .035));
   const paintHeroCopy = p => {
     buildProgress.style.transform = `scaleX(${p})`;
-    buildPhase.textContent = p < .2 ? 'The vision' : p < .65 ? 'Taking shape' : p < .94 ? 'Every detail' : 'A new landmark';
+    buildPhase.textContent = p < .24 ? 'The vision' : p < .52 ? 'Taking shape' : p < .8 ? 'Every detail' : 'A new landmark';
+    const chapter = reducedMotion || p < .24 ? -1 : p < .52 ? 0 : p < .8 ? 1 : 2;
+    if (heroStory) heroStory.hidden = chapter < 0;
+    heroChapters.forEach((panel, index) => {
+      panel.hidden = index !== chapter;
+      if (panel.hidden) return;
+      const start = .24 + index * .28;
+      const opacity = Math.min(clamp((p - start) / .045), index === 2 ? 1 : clamp((start + .28 - p) / .045));
+      panel.style.opacity = String(opacity);
+      panel.style.transform = `translateY(${(1 - opacity) * 12}px)`;
+    });
     if (reducedMotion) return;
-    const copyOpacity = 1 - clamp((p - .12) / .38);
+    const copyOpacity = 1 - clamp((p - .1) / .16);
     heroCopy.style.opacity = String(copyOpacity);
     heroCopy.style.transform = `translateY(${-p * 36}px)`;
     heroCopy.inert = copyOpacity < .05;
@@ -131,7 +146,7 @@
       if (p > 0 && heroActive) {
         sequenceStarted = true;
       }
-      if (heroSequence) heroSequence.setProgress(clamp((p - .035) / .965), sequenceStarted && heroActive);
+      if (heroSequence) heroSequence.setProgress(sequenceProgress(p), sequenceStarted && heroActive);
       syncHeroPoster();
     }
   };
@@ -140,7 +155,7 @@
   };
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      if (heroSequence) heroSequence.setProgress(clamp((heroProgress - .035) / .965), false);
+      if (heroSequence) heroSequence.setProgress(sequenceProgress(heroProgress), false);
     }
     else requestScrollUpdate();
   });
@@ -153,9 +168,9 @@
     try {
       heroSequence = window.NovaHeroSequence({
         canvas: document.querySelector('.hero-canvas'),
-        onDraw: (p, frame) => {
+        onDraw: p => {
           sequenceReady = true;
-          paintHeroCopy(frame === 0 ? 0 : .035 + p * .965);
+          paintHeroCopy(p);
           syncHeroPoster();
         },
         onError: () => {
