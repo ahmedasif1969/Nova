@@ -243,15 +243,18 @@ test('hero chapters follow painted frames, reverse with the building, and disapp
   assert.ok(p.heroChapters.every(panel => panel.hidden));
 });
 
-test('hero requests its final frame with scrolling space left before the sticky section ends', async () => {
+test('hero keeps advancing until just before the sticky section ends', async () => {
   const p = pageFixture({ sequenceLibrary: true });
   // Fixture hero is 3000px tall with a 1000px viewport: 2000px sticky travel.
   p.window.scrollY = 1640; await p.window.emit('scroll'); p.flush();
+  assert.ok(p.sequenceCalls.at(-1).p > .75 && p.sequenceCalls.at(-1).p < 1,
+    'The animation must still be advancing where it used to finish');
+  p.window.scrollY = 1970; await p.window.emit('scroll'); p.flush();
   assert.equal(p.sequenceCalls.at(-1).p, 1);
   assert.equal(p.sequenceCalls.at(-1).active, true);
   assert.ok(p.window.scrollY < 2000);
   p.window.scrollY = 820; await p.window.emit('scroll'); p.flush();
-  assert.ok(p.sequenceCalls.at(-1).p > .4 && p.sequenceCalls.at(-1).p < .6);
+  assert.ok(p.sequenceCalls.at(-1).p > .35 && p.sequenceCalls.at(-1).p < .45);
 });
 
 test('canvas failure restores a static poster immediately and keeps it on subsequent scrolls', async () => {

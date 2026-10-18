@@ -96,9 +96,8 @@
   let sequenceStarted = false;
   let sequenceReady = false;
   const clamp = value => Math.max(0, Math.min(1, value));
-  // Finish the requested sequence before the sticky section ends, leaving
-  // scrolling room for catch-up and a readable final chapter.
-  const sequenceProgress = p => clamp((p - .035) / (.82 - .035));
+  // Keep the frames advancing almost to the end of the sticky section.
+  const sequenceProgress = p => clamp((p - .035) / (.985 - .035));
   const paintHeroCopy = p => {
     buildProgress.style.transform = `scaleX(${p})`;
     buildPhase.textContent = p < .24 ? 'The vision' : p < .52 ? 'Taking shape' : p < .8 ? 'Every detail' : 'A new landmark';
