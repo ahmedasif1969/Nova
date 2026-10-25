@@ -13,7 +13,7 @@
     const capacity = lowMemory ? 10 : 12;
     const decodeAhead = lowMemory ? 6 : 8;
     const decodeConcurrency = lowMemory || mobile ? 2 : 3;
-    const downloadConcurrency = lowMemory ? 3 : 4;
+    const downloadConcurrency = 8;
     // The largest active sequence is 19.6 MB. Retain it without retaining
     // every decoded bitmap; guard against a future larger asset set as well.
     const compressedLimit = 24 * 1024 * 1024;
@@ -145,6 +145,19 @@
       if ((!active && !warming && !prefetching) || destroyed || document.hidden) return;
       // Decoding and downloading have independent limits. Network can run ahead
       // without allocating a full pixel buffer for every downloaded image.
+      const upcoming = wanted.slice(0, decodeAhead);
+      const urgent = upcoming.filter(index => !compressed.has(index) && !downloads.has(index) && !failed.has(index));
+      if (urgent.length && downloads.size === downloadConcurrency) {
+        // Free a few speculative slots when scrolling changes the next frames.
+        // Aborted frames remain eligible for the background queue later.
+        let freed = 0;
+        for (const [index, controller] of downloads) {
+          if (upcoming.includes(index)) continue;
+          controller.abort();
+          downloads.delete(index);
+          if (++freed >= Math.min(urgent.length, 3)) break;
+        }
+      }
       for (const index of downloadWanted) {
         if (downloads.size >= downloadConcurrency) break;
         if (compressed.has(index) || downloads.has(index) || failed.has(index)) continue;
@@ -155,7 +168,7 @@
         downloads.set(index, controller);
         const folder = variant === 'desktop' ? 'hero-frames-v3/desktop' : `hero-frames-q65/${variant}`;
         fetch(`./assets/${folder}/frame-${String(index).padStart(3, '0')}.webp`, {
-          signal: controller.signal, cache: 'force-cache', priority: index === wanted[0] ? 'high' : 'low'
+          signal: controller.signal, cache: 'force-cache', priority: upcoming.includes(index) ? 'high' : 'low'
         })
           .then(response => {
             if (!response.ok) throw new Error(`Hero frame ${response.status}`);
@@ -179,7 +192,7 @@
             }
           })
           .catch(() => { if (!controller.signal.aborted && !destroyed) failed.add(index); })
-          .finally(() => { downloads.delete(index); pump(); });
+          .finally(() => { if (downloads.get(index) === controller) downloads.delete(index); pump(); });
       }
     }
     function pump() {

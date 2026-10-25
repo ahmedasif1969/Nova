@@ -31,8 +31,8 @@ function fixture({ bootstrap = false, deferAdoption = false, mobile = false, dev
     matchMedia: query => ({ matches: query.includes('max-width') && mobile }) };
   runInNewContext(source, { window, document, navigator: { deviceMemory, connection: { saveData } }, AbortController, DOMException, Promise,
     createImageBitmap: decode,
-    fetch: async (url, { signal }) => {
-      requests.push({ url, signal });
+    fetch: async (url, { signal, priority }) => {
+      requests.push({ url, signal, priority });
       const response = { ok: !fail, status: fail ? 404 : 200, blob: async () => ({ index: Number(url.match(/frame-(\d+)/)[1]), size: blobSize, mobilePortrait: url.includes('/mobile-portrait') }) };
       return slowFetch ? new Promise(resolve => fetches.push(() => resolve(response))) : response;
     },
@@ -148,9 +148,11 @@ test('full sequence downloads independently of occupied decoders with bounded co
     for (let i = 0; i < 30; i++) await p.microtasks();
     const stats = p.api.stats();
     assert.equal(stats.decodeAhead, options.deviceMemory === 4 ? 6 : 8);
-    assert.equal(stats.downloadConcurrency, options.deviceMemory === 4 ? 3 : 4);
+    assert.equal(stats.downloadConcurrency, 8);
     assert.equal(p.decodes.length, options.deviceMemory === 4 || options.mobile ? 2 : 3);
     assert.equal(p.requests.length, 192, 'Downloads continue while decoders are occupied');
+    assert.equal(p.requests[0].priority, 'high', 'Opening frames have network priority');
+    assert.equal(p.requests.at(-1).priority, 'low', 'Distant background frames have lower priority');
     assert.equal(stats.compressed, 192);
     assert.ok(stats.compressedBytes <= stats.compressedLimit);
     p.api.destroy(); p.decodes.splice(0).forEach(done => done()); await p.microtasks();
@@ -173,7 +175,7 @@ test('slow downloads stay bounded and continue offscreen without aborting or ref
   for (const deviceMemory of [8, 4]) {
     const p = fixture({ deviceMemory, slowFetch: true });
     p.api.preload();
-    const limit = deviceMemory === 4 ? 3 : 4;
+    const limit = 8;
     assert.equal(p.requests.length, limit);
     p.api.setProgress(1, true); await p.tick();
     assert.equal(p.requests.length, limit, 'Direction changes do not exceed network concurrency');
@@ -203,8 +205,8 @@ test('hidden tabs finish in-flight downloads, retain blobs and resume without a 
   p.document.hidden = true;
   p.api.suspendPreload();
   p.fetches.splice(0).forEach(done => done()); await p.microtasks();
-  assert.equal(p.requests.length, 4, 'Do not start new downloads in a hidden tab');
-  assert.equal(p.api.stats().compressed, 4);
+  assert.equal(p.requests.length, 8, 'Do not start new downloads in a hidden tab');
+  assert.equal(p.api.stats().compressed, 8);
   assert.ok(p.requests.every(r => !r.signal.aborted));
   p.document.hidden = false;
   p.api.preload();
