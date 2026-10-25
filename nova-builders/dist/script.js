@@ -95,9 +95,47 @@
   let heroSequence = null;
   let sequenceStarted = false;
   let sequenceReady = false;
+  let heroExitHeld = false;
+  let heroExitTimer = 0;
+  let heroExitBypassed = false;
   const clamp = value => Math.max(0, Math.min(1, value));
   // Keep the frames advancing almost to the end of the sticky section.
   const sequenceProgress = p => clamp((p - .035) / (.985 - .035));
+  const releaseHeroExit = () => {
+    if (!heroExitHeld) return;
+    heroExitHeld = false;
+    clearTimeout(heroExitTimer);
+    document.documentElement.style.overflow = '';
+    syncScrollLock();
+  };
+  const holdHeroExit = y => {
+    if (heroExitHeld) return;
+    heroExitHeld = true;
+    const exitY = Math.max(0, Math.floor(y - 2));
+    if (lenis) lenis.scrollTo(exitY, { immediate: true, force: true });
+    else window.scrollTo(0, exitY);
+    document.documentElement.style.overflow = 'hidden';
+    lenis?.stop();
+    // Never strand someone in the hero if a frame stalls permanently.
+    heroExitTimer = setTimeout(() => { heroExitBypassed = true; releaseHeroExit(); }, 15000);
+  };
+  window.addEventListener('wheel', event => {
+    if (!heroExitHeld) return;
+    if (event.deltaY < 0) { heroExitBypassed = true; releaseHeroExit(); }
+    else event.preventDefault();
+  }, { passive: false });
+  let heroTouchY = 0;
+  window.addEventListener('touchstart', event => {
+    if (heroExitHeld) heroTouchY = event.touches[0]?.clientY || 0;
+  }, { passive: true });
+  window.addEventListener('touchmove', event => {
+    if (!heroExitHeld) return;
+    if ((event.touches[0]?.clientY || 0) > heroTouchY) {
+      heroExitBypassed = true;
+      releaseHeroExit();
+    }
+    else event.preventDefault();
+  }, { passive: false });
   const paintHeroCopy = p => {
     buildProgress.style.transform = `scaleX(${p})`;
     buildPhase.textContent = p < .24 ? 'The vision' : p < .52 ? 'Taking shape' : p < .8 ? 'Every detail' : 'A new landmark';
@@ -131,6 +169,8 @@
     const heroHeight = hero.offsetHeight;
     heroActive = y >= heroTop && y < heroTop + heroHeight;
     const p = clamp((y - heroTop) / Math.max(1, heroHeight - viewport));
+    if (p < .9) heroExitBypassed = false;
+    if (heroExitHeld && y < heroTop + heroHeight - viewport - viewport * .1) releaseHeroExit();
     heroProgress = p;
     progress.style.transform = `scaleX(${clamp(y / pageRange)})`;
     header.classList.toggle('scrolled', y > 80);
@@ -145,7 +185,12 @@
       if (p > 0 && heroActive) {
         sequenceStarted = true;
       }
-      if (heroSequence) heroSequence.setProgress(sequenceProgress(p), sequenceStarted && heroActive);
+      if (heroSequence && sequenceStarted && sequenceReady && !heroExitHeld && !heroExitBypassed &&
+          y >= heroTop + heroHeight - viewport &&
+          heroSequence.stats().displayed < 191) {
+        holdHeroExit(heroTop + heroHeight - viewport);
+      }
+      if (heroSequence) heroSequence.setProgress(sequenceProgress(p), sequenceStarted && (heroActive || heroExitHeld));
       syncHeroPoster();
     }
   };
@@ -171,8 +216,11 @@
           sequenceReady = true;
           paintHeroCopy(p);
           syncHeroPoster();
+          if (p >= 1) releaseHeroExit();
         },
         onError: () => {
+          heroExitBypassed = true;
+          releaseHeroExit();
           heroSequence = null;
           sequenceReady = false;
           syncHeroPoster();
