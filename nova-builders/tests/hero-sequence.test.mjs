@@ -338,7 +338,7 @@ test('offscreen resize retains pixels until a replacement bitmap is ready', asyn
   p.api.destroy(); await p.microtasks();
 });
 
-test('both active sequences contain all 192 frames and the previous original is preserved', async () => {
+test('active desktop and phone sequences contain all 192 frames and the originals are preserved', async () => {
   const root = new URL('../dist/assets/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('hero-frames-q65/manifest.json', root), 'utf8'));
   assert.equal(manifest.frameCount, 192);
@@ -346,6 +346,13 @@ test('both active sequences contain all 192 frames and the previous original is 
   assert.equal(manifest.source, 'nova-construction-v2.mp4');
   const replacement = await readFile(new URL(manifest.source, root));
   assert.equal(createHash('sha256').update(replacement).digest('hex'), '9ba8c3aa0a6233cc14924a2cbfb91c3a10411e88112054c0783b9de2ed8b1c08');
+  const desktopManifest = JSON.parse(await readFile(new URL('hero-frames-v3/manifest.json', root), 'utf8'));
+  assert.equal(desktopManifest.source, manifest.source);
+  assert.equal(desktopManifest.frameCount, 192);
+  assert.equal(desktopManifest.variants[0].quality, 75);
+  assert.equal(desktopManifest.variants[0].width, 1280);
+  assert.equal(desktopManifest.variants[0].height, 720);
+  assert.equal((await readdir(new URL('hero-frames-v3/desktop/', root))).length, 192);
   for (const variant of manifest.variants) {
     assert.equal(variant.width, variant.name === 'desktop' ? 1280 : 512);
     assert.equal(variant.height, 720);

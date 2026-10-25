@@ -14,7 +14,7 @@
     const decodeAhead = lowMemory ? 6 : 8;
     const decodeConcurrency = lowMemory || mobile ? 2 : 3;
     const downloadConcurrency = lowMemory ? 3 : 4;
-    // The current complete sequence is 17.6 MB. Retain it without retaining
+    // The largest active sequence is 19.6 MB. Retain it without retaining
     // every decoded bitmap; guard against a future larger asset set as well.
     const compressedLimit = 24 * 1024 * 1024;
     const compressed = new Map(), downloads = new Map(), failed = new Set(), fetched = new Set();
@@ -153,7 +153,8 @@
         if (fetched.has(index) && !wanted.includes(index)) continue;
         const controller = new AbortController();
         downloads.set(index, controller);
-        fetch(`./assets/hero-frames-q65/${variant}/frame-${String(index).padStart(3, '0')}.webp`, {
+        const folder = variant === 'desktop' ? 'hero-frames-v3/desktop' : `hero-frames-q65/${variant}`;
+        fetch(`./assets/${folder}/frame-${String(index).padStart(3, '0')}.webp`, {
           signal: controller.signal, cache: 'force-cache', priority: index === wanted[0] ? 'high' : 'low'
         })
           .then(response => {

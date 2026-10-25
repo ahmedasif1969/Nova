@@ -77,7 +77,7 @@ function pageFixture({ reducedMotion = false, initialScroll = 0, deferStyles = f
   if (sequenceLibrary) {
     window.NovaHeroSequence = options => {
       sequenceCallbacks = options;
-      return { setProgress(p, active) { sequenceCalls.push({ p, active }); }, preload() { sequenceCalls.push({ preload: true }); }, resize() {} };
+      return { setProgress(p, active) { sequenceCalls.push({ p, active }); }, preload() { sequenceCalls.push({ preload: true }); }, resize() {}, stats() { return { displayed: 191 }; } };
     };
   }
   const matchesMedia = query => {
