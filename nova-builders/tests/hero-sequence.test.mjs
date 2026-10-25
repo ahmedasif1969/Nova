@@ -124,6 +124,8 @@ test('warm-up paints zero and retains the full compressed clip without decoding 
     for (let i = 0; i < 30; i++) await p.microtasks();
     assert.equal(p.requests.length, 192);
     assert.equal(p.api.stats().compressed, 192);
+    assert.equal(p.api.stats().openingDownloaded, 48);
+    assert.equal(p.api.stats().openingDecoded, 8);
     assert.deepEqual(p.painted, [0]);
     assert.equal(p.canvas.hidden, false);
     assert.ok(p.api.stats().decoded <= p.api.stats().capacity);

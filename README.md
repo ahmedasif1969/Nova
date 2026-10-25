@@ -21,6 +21,8 @@ The website source is in `nova-builders/dist/`. Pinned GSAP and Lenis files are 
 
 ### Asset loading
 
+- A full-screen opening dialog measures an actual buffer of 48 downloaded frames and 8 decoded opening frames. It reveals the site after frame zero has painted, while the remaining frames keep downloading. Skip intro and Escape reveal immediately; errors and a 20-second safety deadline also release the page without faking completion. Reduced motion, data saver, and direct section links bypass the dialog.
+
 Compression-only baseline: tag checkpoint/live-before-compression-2026-10-16 preserves the previously live commit 9156b9f. This change only compresses the frames; resolution, frame count, playback, opening buffer, scheduling and caching stay at that checkpoint.
 
 - Responsive WebP images replace PNGs throughout the page and project dialogs. The twilight Aurelian poster has a matching responsive preload and remains eagerly loaded. Its 800px option uses quality 72; the other sizes use quality 78. Project cards offer an 800px quality-80 option alongside the existing quality-95 `*-detail-*.webp` sizes. All are generated from the original PNGs. Cards use generous landscape frames, with a full-width featured development and two supporting projects.
@@ -38,6 +40,8 @@ Compression-only baseline: tag checkpoint/live-before-compression-2026-10-16 pre
 - `styles.css` is the editable source of truth. Run `npm run build:css` from `nova-builders` after CSS changes to regenerate inline critical CSS and `deferred.css`. `npm run check` also checks that those generated outputs are current.
 
 ### Hero video provenance
+
+See [`HERO-VIDEO-PREFERENCES.md`](HERO-VIDEO-PREFERENCES.md) for my reusable preferences for hero videos across web projects.
 
 Active replacement (14 October 2026): `nova-construction-v2.mp4` is an unchanged copy of the supplied `Construction_timelapse_of_skyscr…_20261014163442.mp4`, SHA-256 `9ba8c3aa0a6233cc14924a2cbfb91c3a10411e88112054c0783b9de2ed8b1c08`. All 192 native 1280×720 desktop frames are extracted at WebP quality 65, with no frame interpolation or resizing. The portrait phone set crops the middle 512×720 pixels from the same source video without rescaling and uses WebP quality 85. That saves transfer while preserving the pixels phones already showed under center-cover; higher WebP quality reduces compression artifacts but cannot increase detail beyond the source. The archived `nova-construction-v2-scrub.mp4` is a silent H.264 CRF-18 all-intra derivative and is no longer referenced by the page. The twilight poster remains the still fallback. The following original-video details describe preserved archival assets, not the active replacement.
 

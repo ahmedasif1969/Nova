@@ -98,6 +98,23 @@ button[hidden], [hidden] { display: none !important; }
 .menu-toggle span { display: block; height: 1px; background: currentColor; margin: 7px 0; transition: transform .3s; }
 .mobile-menu { display: none; }
 
+.hero-loading, .hero-loading body { overflow: hidden; }
+.hero-loader { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: var(--pad); border: 0; background: var(--ink); color: var(--paper); overscroll-behavior: contain; }
+.hero-loader[open] { display: grid; place-items: center; }
+.hero-loader::backdrop { background: var(--ink); }
+.hero-loader-content { width: min(100%, 42rem); text-align: center; }
+.hero-loader-brand { margin: 0 0 clamp(3rem, 10vh, 6rem); font-size: 1.2rem; letter-spacing: .28em; }
+.hero-loader-brand span { display: block; margin-top: .6rem; font-size: .55rem; letter-spacing: .2em; }
+.hero-loader h2 { margin: 0; font: 400 clamp(2.4rem, 6vw, 4.5rem)/1.1 var(--display); letter-spacing: -.025em; }
+.hero-loader-content > p:not(.hero-loader-brand) { margin: 1rem 0 2.5rem; font-size: .85rem; color: #c0c5b9; }
+.hero-loader-meter { display: flex; align-items: center; gap: 1rem; max-width: 22rem; margin: auto; }
+.hero-loader-meter progress { appearance: none; flex: 1; width: 0; height: 2px; border: 0; background: var(--white-line); color: var(--paper); }
+.hero-loader-meter progress::-webkit-progress-bar { background: var(--white-line); }
+.hero-loader-meter progress::-webkit-progress-value { background: var(--paper); }
+.hero-loader-meter progress::-moz-progress-bar { background: var(--paper); }
+.hero-loader-meter span { width: 3ch; font-size: .75rem; font-variant-numeric: tabular-nums; }
+.hero-loader-skip { display: inline-flex; align-items: center; gap: 1.2rem; min-height: 48px; margin-top: 2rem; padding: .5rem 0; border: 0; border-bottom: 1px solid var(--white-line); background: transparent; color: var(--paper); font: inherit; font-size: .8rem; cursor: pointer; }
+.hero-loader-skip:hover { border-color: var(--paper); }
 .hero { height: 600vh; height: 600svh; background: var(--ink); }
 .hero-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; color: var(--paper); }
 .hero-canvas, .hero-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }

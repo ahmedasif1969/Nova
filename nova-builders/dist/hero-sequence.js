@@ -294,12 +294,16 @@
       },
       // Lightweight diagnostics, containing counts only (not pixel buffers).
       stats: () => ({ capacity, decoded: cache.size, pending: pending.size, displayed, variant,
+        openingDownloaded: allFrames.slice(0, 48).filter(index => compressed.has(index)).length,
+        openingDecoded: allFrames.slice(0, 8).filter(index => cache.has(index)).length,
+        openingFailed: allFrames.slice(0, 48).some(index => failed.has(index)), destroyed,
         decodeAhead, decodeConcurrency, downloadConcurrency, downloading: downloads.size,
         compressed: compressed.size, compressedBytes, compressedLimit })
     };
     instances.set(canvas, api);
     return api;
   };
+  window.NovaHeroSequence.peek = canvas => instances.get(canvas);
 
   // This local module runs BEFORE third-party animation scripts. Prepare the
   // sequence after the cover can paint, without waiting for window.load.
