@@ -3,10 +3,15 @@
   'use strict';
   const dialog = document.querySelector('[data-hero-loader]');
   const canvas = document.querySelector('.hero-canvas');
+  const gate = window.NovaHeroIntroGate;
+  if (gate?.dismissed) return;
   if (!dialog || !canvas || typeof dialog.showModal !== 'function' ||
       window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
       navigator.connection?.saveData || window.scrollY > 0 ||
-      (window.location.hash && window.location.hash !== '#top' && window.location.hash !== '#main-content')) return;
+      (window.location.hash && window.location.hash !== '#top' && window.location.hash !== '#main-content')) {
+    gate?.finish();
+    return;
+  }
 
   const meter = dialog.querySelector('[data-hero-loader-progress]');
   const percent = dialog.querySelector('[data-hero-loader-percent]');
@@ -18,6 +23,7 @@
     closed = true;
     clearTimeout(poll);
     clearTimeout(deadline);
+    if (gate) { gate.finish(); return; }
     document.documentElement.classList.remove('hero-loading');
     if (dialog.open) dialog.close();
     const focus = previousFocus && previousFocus !== document.body
@@ -50,17 +56,22 @@
     }
     poll = setTimeout(update, 100);
   }
+  if (gate) gate.onFinish = () => { closed = true; clearTimeout(poll); };
+  if (!gate) {
   skip.addEventListener('click', finish);
   dialog.addEventListener('cancel', event => { event.preventDefault(); finish(); });
   dialog.addEventListener('close', finish);
   dialog.addEventListener('wheel', event => event.preventDefault(), { passive: false });
   dialog.addEventListener('touchmove', event => event.preventDefault(), { passive: false });
+  }
   document.querySelector('script[src="./hero-sequence.js"]')?.addEventListener('error', finish);
   try {
+    if (!gate) {
     dialog.showModal();
     document.documentElement.classList.add('hero-loading');
     // Always release the page on a stalled connection; never fake completion.
     deadline = setTimeout(finish, 20000);
+    }
     update();
   } catch { finish(); }
 })();

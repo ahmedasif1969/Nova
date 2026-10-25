@@ -260,6 +260,42 @@ button[hidden], [hidden] { display: none !important; }
       <button class="hero-loader-skip" type="button" data-hero-loader-skip autofocus>Skip intro <span aria-hidden="true">↗</span></button>
     </div>
   </dialog>
+  <script>
+    // Open before parsing the site so a cold script download cannot flash the page.
+    (() => {
+      const dialog = document.querySelector('[data-hero-loader]');
+      const gate = window.NovaHeroIntroGate = { dismissed: false, previousFocus: document.activeElement };
+      let deadline;
+      gate.finish = () => {
+        if (gate.dismissed) return;
+        gate.dismissed = true;
+        clearTimeout(deadline);
+        document.documentElement.classList.remove('hero-loading');
+        if (dialog.open) dialog.close();
+        gate.onFinish?.();
+        const focus = gate.previousFocus && gate.previousFocus !== document.body
+          ? gate.previousFocus : document.querySelector('.hero-actions a');
+        focus?.focus({ preventScroll: true });
+      };
+      if (typeof dialog.showModal !== 'function' ||
+          matchMedia('(prefers-reduced-motion: reduce)').matches ||
+          navigator.connection?.saveData || window.scrollY > 0 ||
+          (location.hash && location.hash !== '#top' && location.hash !== '#main-content')) {
+        gate.dismissed = true;
+        return;
+      }
+      dialog.querySelector('[data-hero-loader-skip]').addEventListener('click', gate.finish);
+      dialog.addEventListener('cancel', event => { event.preventDefault(); gate.finish(); });
+      dialog.addEventListener('close', gate.finish);
+      dialog.addEventListener('wheel', event => event.preventDefault(), { passive: false });
+      dialog.addEventListener('touchmove', event => event.preventDefault(), { passive: false });
+      try {
+        document.documentElement.classList.add('hero-loading');
+        dialog.showModal();
+        deadline = setTimeout(gate.finish, 20000);
+      } catch { gate.finish(); }
+    })();
+  </script>
   <a class="skip-link" href="#main-content">Skip to content</a>
   <div class="grain" aria-hidden="true"></div>
   <div class="progress" aria-hidden="true"><span></span></div>
